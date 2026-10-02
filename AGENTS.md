@@ -7,7 +7,7 @@ hook-enforced rules). Keep this file current when the build, layout, or public A
 
 Sneakers MCP server: the bridge that lets AI agents use the vault over MCP (Streamable HTTP,
 stateless), plus two local commands for people, `sneakers-run` and `sneakers-put`. A leaf HTTP
-service with no database: it checks each caller's bearer (Hydra JWTs locally, API and personal
+service with no database: it checks each caller's bearer (Ory Hydra JWTs locally, API and personal
 tokens through the gateway) and turns every tool call into one or more calls to the gateway's
 `/machine/graphql` with that same token. Before changing it, know the rules it keeps: it holds no
 credentials and makes no access decisions (the gateway and vault do); every bearer check fails
@@ -22,7 +22,7 @@ reach the SSH broker service.
 - `cmd/sneakers-run/`, `cmd/sneakers-put/` - the two local commands.
 - `internal/authn/` - classifies a bearer by shape and confirms API and personal tokens with the
   gateway, with a short positive cache keyed by the token's SHA-256.
-- `internal/hydra/` - the Hydra JWT verifier (JWKS fetch and cache).
+- `internal/hydra/` - the Ory Hydra JWT verifier (JWKS fetch and cache).
 - `internal/tools/` - the MCP tools; each is a thin mapping onto the gateway client.
 - `internal/gwclient/` - the machine GraphQL client; every call takes the caller's token.
 - `internal/cliauth/` - the token and URL rules both commands share.

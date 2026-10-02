@@ -125,6 +125,6 @@ tokens are ignored.
 
 A client only ever holds groups a site admin allowed: `linkOidcClient(serviceAccountId,
 oidcSubject, allowedGroups)` takes ids or exact names, refuses anything that doesn't resolve to
-exactly one group, and stores ids. An empty `allowedGroups` grants no groups. For example, a Hydra
-client with `scope: "group-helpdesk platform-team"` and `allowedGroups: ["Help Desk", "Platform
+exactly one group, and stores ids. An empty `allowedGroups` grants no groups. For example, an Ory
+Hydra client with `scope: "group-helpdesk platform-team"` and `allowedGroups: ["Help Desk", "Platform
 Team"]`. API tokens from `mintApiToken` use the same grammar; their mint-time scope is the bound.

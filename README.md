@@ -10,7 +10,7 @@ and the vault applies RACI and writes the audit trail.
 
 ## ✨ Highlights
 
-- 🔐 **Fail-closed bearer gate:** Hydra client-credentials JWTs are checked locally against the JWKS; service-account and personal tokens are confirmed by the gateway. Anything else is a bare `401`.
+- 🔐 **Fail-closed bearer gate:** Ory Hydra client-credentials JWTs are checked locally against the JWKS; service-account and personal tokens are confirmed by the gateway. Anything else is a bare `401`.
 - 🧰 **Tools for agents:** find, read and reveal secrets (with owner approval when the secret asks for it), create, generate, move, rename and retype them, organise folders, manage targets and turn rotation and heartbeat on or off.
 - 🙈 **Values stay out of transcripts:** tool descriptions send agents to `sneakers-put` for any value that already exists on disk, and refuse sensitive fields in updates.
 - 🏃 **sneakers-run:** runs one command with a secret supplied on stdin or in a private temp file, released only for the exact command its owner approved, and masked in the output.
@@ -31,7 +31,7 @@ GATEWAY_MACHINE_GRAPHQL_URL=http://localhost:9100/machine/graphql go run ./cmd/m
 
 HTTP listens on port 9101. With no other settings only service-account and personal tokens are
 accepted, and the gateway confirms each one. [docs/configuration.md](docs/configuration.md) lists
-every setting, including the Hydra JWT mode.
+every setting, including the Ory Hydra JWT mode.
 
 Run the tests (the gateway and the JWKS are test HTTP servers, so nothing else is needed):
 

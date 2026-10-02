@@ -7,7 +7,7 @@ issues from a template, a branch per issue, Conventional Commits, squash-merged 
 
 ## Working on this repo
 
-- Build and test: see [README.md](README.md). The gateway and the Hydra JWKS are `httptest`
+- Build and test: see [README.md](README.md). The gateway and the Ory Hydra JWKS are `httptest`
   servers inside the tests, so `go test ./...` needs nothing else running.
 - Adding or changing a tool: the gateway's machine GraphQL schema is the contract. The field must
   exist in `graphql/machine.graphqls` in
