@@ -14,9 +14,9 @@ export SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_...
 sneakers-put -folder <folder id> -type <type id> -name "router-01 admin" \
   -field username=admin -field password=@./router-01.pw
 
-# Create a credential that must never rotate, for example a DSRM password.
-sneakers-put -folder <folder id> -type <type id> -name "dc01 DSRM" \
-  -disable-rotation -field password=-  < ./dsrm.txt
+# Create a credential that must never rotate, for example a recovery password.
+sneakers-put -folder <folder id> -type <type id> -name "recovery-admin" \
+  -disable-rotation -field password=-  < ./recovery.txt
 
 # Update fields of an existing secret.
 sneakers-put -id <secret id> -field password=@./new.pw

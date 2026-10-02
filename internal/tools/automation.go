@@ -13,7 +13,7 @@ const toolSetAutomation = "sneakers_set_secret_automation"
 
 // neverRotateHint is shared by the create and generate descriptions: a
 // rotating type on a credential that must stay fixed can lock people out.
-const neverRotateHint = "Credentials that must never rotate (for example a DSRM password) " +
+const neverRotateHint = "Credentials that must never rotate (for example a recovery password) " +
 	"must be created with disableRotation: true, so no rotation is ever scheduled. Use " + toolSetAutomation +
 	" to change it later."
 

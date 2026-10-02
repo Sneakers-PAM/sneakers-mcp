@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-const optedOut = `{"id":"s1","name":"dsrm","folderId":"f","typeId":"type-windows-local","rotationOptOut":true,"heartbeatOptOut":true}`
+const optedOut = `{"id":"s1","name":"recovery-admin","folderId":"f","typeId":"type-windows-local","rotationOptOut":true,"heartbeatOptOut":true}`
 
 func TestFindSecretsShowsTheOptOuts(t *testing.T) {
 	gw := fakeGateway(t, `{"data":{"findSecretsForPrincipal":[`+optedOut+`]}}`)
@@ -22,7 +22,7 @@ func TestFindSecretsShowsTheOptOuts(t *testing.T) {
 func TestCreateAndGenerateForwardTheOptOuts(t *testing.T) {
 	gw := fakeGateway(t, `{"data":{"createSecretForPrincipal":`+optedOut+`}}`)
 	_, out, err := newTools(gw.URL, nil).createSecret(context.Background(), callReq("Bearer t"),
-		createSecretIn{FolderID: "f", TypeID: "type-windows-local", Name: "dsrm", DisableRotation: true, DisableHeartbeat: true})
+		createSecretIn{FolderID: "f", TypeID: "type-windows-local", Name: "recovery-admin", DisableRotation: true, DisableHeartbeat: true})
 	vars, _ := gw.vars.Load().(map[string]any)
 	if err != nil || !out.Secret.RotationOptOut || vars["disableRotation"] != true || vars["disableHeartbeat"] != true {
 		t.Fatalf("create: out=%+v err=%v vars=%#v", out, err, vars)
@@ -30,7 +30,7 @@ func TestCreateAndGenerateForwardTheOptOuts(t *testing.T) {
 
 	gw2 := fakeGateway(t, `{"data":{"generateSecretForPrincipal":{"secret":`+optedOut+`,"generatedValue":null}}}`)
 	_, gout, err := newTools(gw2.URL, nil).generateSecret(context.Background(), callReq("Bearer t"),
-		generateSecretIn{FolderID: "f", TypeID: "type-windows-local", Name: "dsrm", DisableRotation: true})
+		generateSecretIn{FolderID: "f", TypeID: "type-windows-local", Name: "recovery-admin", DisableRotation: true})
 	vars, _ = gw2.vars.Load().(map[string]any)
 	if err != nil || !gout.Secret.RotationOptOut || vars["disableRotation"] != true || vars["disableHeartbeat"] != nil {
 		t.Fatalf("generate: out=%+v err=%v vars=%#v", gout, err, vars)
@@ -82,7 +82,7 @@ func TestCreateAndGenerateDescriptionsSteerNeverRotatingCredentials(t *testing.T
 		if tl.Name != toolCreate && tl.Name != toolGenerate {
 			continue
 		}
-		if !strings.Contains(tl.Description, "disableRotation") || !strings.Contains(tl.Description, "DSRM") {
+		if !strings.Contains(tl.Description, "disableRotation") || !strings.Contains(tl.Description, "a recovery password") {
 			t.Errorf("%s description does not steer never-rotating credentials to disableRotation: %q", tl.Name, tl.Description)
 		}
 	}

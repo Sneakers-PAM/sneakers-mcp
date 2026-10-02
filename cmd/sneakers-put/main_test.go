@@ -22,14 +22,14 @@ func env(m map[string]string) func(string) string { return func(k string) string
 var goodEnv = map[string]string{"SNEAKERS_TOKEN": "snk_u_x", "SNEAKERS_URL": "https://sneakers.example.org/"}
 
 func TestParseCreateMode(t *testing.T) {
-	c, err := parse([]string{"-folder", "f1", "-type", "type-password", "-name", "dsrm", "-disable-rotation",
+	c, err := parse([]string{"-folder", "f1", "-type", "type-password", "-name", "recovery-admin", "-disable-rotation",
 		"-field", "password=@/run/pw", "-field", "username=Administrator"}, env(goodEnv))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := c.req
 	if c.endpoint != "https://sneakers.example.org/machine/graphql" || r.Token != "snk_u_x" || r.FolderID != "f1" ||
-		r.TypeID != "type-password" || r.Name != "dsrm" || !r.DisableRotation || r.SecretID != "" || len(r.Fields) != 2 ||
+		r.TypeID != "type-password" || r.Name != "recovery-admin" || !r.DisableRotation || r.SecretID != "" || len(r.Fields) != 2 ||
 		r.Fields[0] != (secretput.FieldSpec{Key: "password", Source: secretput.SourceFile, Path: "/run/pw"}) {
 		t.Fatalf("got %+v endpoint=%q", r, c.endpoint)
 	}
@@ -126,19 +126,19 @@ func localEnv(url string) func(string) string {
 
 func TestRunCreatePrintsOnlyIDAndName(t *testing.T) {
 	srv := fakeGateway(t, map[string]string{
-		"createSecretForPrincipal": `{"data":{"createSecretForPrincipal":{"id":"s1","name":"dsrm","folderId":"f1","typeId":"t"}}}`,
+		"createSecretForPrincipal": `{"data":{"createSecretForPrincipal":{"id":"s1","name":"recovery-admin","folderId":"f1","typeId":"t"}}}`,
 	})
 	pw := filepath.Join(t.TempDir(), "pw")
 	if err := os.WriteFile(pw, []byte("FILE-MARKER\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"-insecure-localhost", "-folder", "f1", "-type", "t", "-name", "dsrm", "-field", "password=@" + pw, "-field", "passphrase=-"},
+	code := run([]string{"-insecure-localhost", "-folder", "f1", "-type", "t", "-name", "recovery-admin", "-field", "password=@" + pw, "-field", "passphrase=-"},
 		localEnv(srv.URL), strings.NewReader("STDIN-MARKER"), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr=%s", code, stderr.String())
 	}
-	if stdout.String() != "id: s1\nname: dsrm\n" {
+	if stdout.String() != "id: s1\nname: recovery-admin\n" {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	for _, leak := range []string{"FILE-MARKER", "STDIN-MARKER", "snk_u_x"} {

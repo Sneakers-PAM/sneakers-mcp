@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	updateFindReply  = `{"data":{"findSecretsForPrincipal":[{"id":"s0","name":"other","folderId":"f","typeId":"t0"},{"id":"s1","name":"palo-fw-01","folderId":"f","typeId":"t-login"}]}}`
+	updateFindReply  = `{"data":{"findSecretsForPrincipal":[{"id":"s0","name":"other","folderId":"f","typeId":"t0"},{"id":"s1","name":"fw-01","folderId":"f","typeId":"t-login"}]}}`
 	updateTypesReply = `{"data":{"secretTypes":[{"id":"t0","name":"Other","fields":[{"key":"endpoint","label":"Endpoint","kind":"TEXT","required":false,"sensitive":false}]},` +
 		`{"id":"t-login","name":"Login","fields":[` +
 		`{"key":"url","label":"URL","kind":"TEXT","required":false,"sensitive":false},` +
 		`{"key":"notes","label":"Notes","kind":"MULTILINE","required":false,"sensitive":false},` +
 		`{"key":"password","label":"Password","kind":"PASSWORD","required":true,"sensitive":true}]}]}}`
-	updateOKReply = `{"data":{"updateSecretFieldsForPrincipal":{"secret":{"id":"s1","name":"palo-fw-01","folderId":"f","typeId":"t-login"},"changedFieldKeys":["url","notes"]}}}`
+	updateOKReply = `{"data":{"updateSecretFieldsForPrincipal":{"secret":{"id":"s1","name":"fw-01","folderId":"f","typeId":"t-login"},"changedFieldKeys":["url","notes"]}}}`
 )
 
 // routedGW answers each machine GraphQL operation by name and records the

@@ -63,11 +63,11 @@ func TestServiceAccountTokenIsLabelledWithItsAccount(t *testing.T) {
 	}
 }
 
-func TestOlderGatewayStillAuthenticatesAndLabelsByKind(t *testing.T) {
+func TestGatewayRefusingWhoamiStillAuthenticatesAndLabelsByKind(t *testing.T) {
 	srv, calls := whoamiGateway(t, false, "")
 	info, err := newVerifier(t, srv.URL, nil).Verify(context.Background(), userTokenPrefix+newToken(t))
 	if err != nil {
-		t.Fatalf("an older gateway must still authenticate: %v", err)
+		t.Fatalf("a gateway that refuses the machineWhoami field must still authenticate: %v", err)
 	}
 	if !strings.HasPrefix(info.UserID, "user-token:") || strings.HasPrefix(info.UserID, "sa-token:") {
 		t.Fatalf("label = %q, want a user-token label", info.UserID)

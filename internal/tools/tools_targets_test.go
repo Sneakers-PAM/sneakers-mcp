@@ -29,7 +29,7 @@ func TestListTargetsToolForwardsFilters(t *testing.T) {
 func TestSaveTargetToolValidatesAndForwards(t *testing.T) {
 	gw := fakeGateway(t, `{"data":{"saveTargetForPrincipal":{"id":"t9","name":"branch DCs","hostname":"dc1.branch.example.org","kind":"windows","domain":"branch.example.org","realm":"","connectionId":"conn-ldaps","description":"","ownerUserId":"u-ada","secretCount":0}}}`)
 	ts := newTools(gw.URL, nil)
-	for name, host := range map[string]string{"space": "dc1 med", "scheme": "ldaps://dc1", "empty label": "dc1..org", "too long": strings.Repeat("a", 254)} {
+	for name, host := range map[string]string{"space": "dc1 example", "scheme": "ldaps://dc1", "empty label": "dc1..org", "too long": strings.Repeat("a", 254)} {
 		if _, _, err := ts.saveTarget(context.Background(), callReq("Bearer t"), saveTargetIn{Name: "x", Hostname: host, ConnectionID: "conn-ldaps"}); err == nil {
 			t.Errorf("%s hostname %q accepted", name, host)
 		}

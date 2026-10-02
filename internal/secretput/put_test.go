@@ -91,11 +91,11 @@ func writeFile(t *testing.T, content string) string {
 func TestCreateReadsFileAndStdinTrimsOneNewlineAndOptsOut(t *testing.T) {
 	gw := newFake(t, map[string]string{
 		"secretTypes":              typesReply,
-		"createSecretForPrincipal": `{"data":{"createSecretForPrincipal":{"id":"s1","name":"dsrm","folderId":"f1","typeId":"type-password","rotationOptOut":true}}}`,
+		"createSecretForPrincipal": `{"data":{"createSecretForPrincipal":{"id":"s1","name":"recovery-admin","folderId":"f1","typeId":"type-password","rotationOptOut":true}}}`,
 	})
 	pw := writeFile(t, "FILE-VALUE\n\n")
 	res, err := Put(context.Background(), gwclient.New(gw.URL, nil), Request{
-		Token: "snk_u_x", FolderID: "f1", TypeID: "type-password", Name: "dsrm", DisableRotation: true,
+		Token: "snk_u_x", FolderID: "f1", TypeID: "type-password", Name: "recovery-admin", DisableRotation: true,
 		Fields: []FieldSpec{
 			{Key: "password", Source: SourceFile, Path: pw},
 			{Key: "token", Source: SourceStdin},
@@ -103,7 +103,7 @@ func TestCreateReadsFileAndStdinTrimsOneNewlineAndOptsOut(t *testing.T) {
 		},
 		Stdin: strings.NewReader("STDIN-VALUE\r\n"),
 	})
-	if err != nil || res.ID != "s1" || res.Name != "dsrm" {
+	if err != nil || res.ID != "s1" || res.Name != "recovery-admin" {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
 	got := gw.fields("createSecretForPrincipal")
@@ -113,7 +113,7 @@ func TestCreateReadsFileAndStdinTrimsOneNewlineAndOptsOut(t *testing.T) {
 	gw.mu.Lock()
 	v := gw.vars["createSecretForPrincipal"]
 	gw.mu.Unlock()
-	if v["folderId"] != "f1" || v["typeId"] != "type-password" || v["name"] != "dsrm" || v["disableRotation"] != true {
+	if v["folderId"] != "f1" || v["typeId"] != "type-password" || v["name"] != "recovery-admin" || v["disableRotation"] != true {
 		t.Fatalf("vars = %#v", v)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const optedOutSummary = `{"id":"s1","name":"dsrm","folderId":"f","typeId":"type-windows-local","rotationOptOut":true,"heartbeatOptOut":false}`
+const optedOutSummary = `{"id":"s1","name":"recovery-admin","folderId":"f","typeId":"type-windows-local","rotationOptOut":true,"heartbeatOptOut":false}`
 
 func TestSummariesDecodeTheAutomationOptOuts(t *testing.T) {
 	var cp capture
@@ -44,7 +44,7 @@ func TestCreateAndGenerateSendTheOptOutsOnlyWhenSet(t *testing.T) {
 	srv := newFakeGateway(t, &cp, `{"data":{"createSecretForPrincipal":`+optedOutSummary+`}}`, 200)
 	c := New(srv.URL, nil)
 
-	s, err := c.CreateSecret(context.Background(), "tok", "f", "t", "dsrm", nil, "", Automation{DisableRotation: true})
+	s, err := c.CreateSecret(context.Background(), "tok", "f", "t", "recovery-admin", nil, "", Automation{DisableRotation: true})
 	if err != nil || !s.RotationOptOut {
 		t.Fatalf("s=%+v err=%v", s, err)
 	}
@@ -65,7 +65,7 @@ func TestCreateAndGenerateSendTheOptOutsOnlyWhenSet(t *testing.T) {
 	}
 
 	srv2 := newFakeGateway(t, &cp, `{"data":{"generateSecretForPrincipal":{"secret":`+optedOutSummary+`,"generatedValue":null}}}`, 200)
-	g, _, err := New(srv2.URL, nil).GenerateSecret(context.Background(), "tok", "f", "t", "dsrm", nil, "", "", false,
+	g, _, err := New(srv2.URL, nil).GenerateSecret(context.Background(), "tok", "f", "t", "recovery-admin", nil, "", "", false,
 		Automation{DisableRotation: true, DisableHeartbeat: true})
 	if err != nil || !g.RotationOptOut {
 		t.Fatalf("g=%+v err=%v", g, err)

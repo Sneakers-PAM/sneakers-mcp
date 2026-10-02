@@ -312,8 +312,8 @@ func (v *APITokenVerifier) store(key [sha256.Size]byte, c cached, now time.Time)
 	v.cache[key] = c
 }
 
-// errNoWhoami means the gateway refused the query that asks machineWhoami, as
-// a gateway without that field does; the caller retries health only.
+// errNoWhoami means a gateway that refuses the machineWhoami field rejected
+// the query that asks it; the caller retries health only.
 var errNoWhoami = errors.New("gateway pre-check: machineWhoami not supported")
 
 // check asks the gateway whether token authenticates, and who it is when the
