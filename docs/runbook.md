@@ -9,27 +9,27 @@
   `GATEWAY_MACHINE_GRAPHQL_URL`. Use a private network or `https://` for it; redirects from it are
   never followed, so a token can't be replayed to another URL.
 - **Pick the bearer modes on purpose.** API and personal tokens are on by default. Set
-  `HYDRA_ISSUER` (with `MCP_RESOURCE_URL`) only if agents get client-credentials JWTs from Hydra,
+  `HYDRA_ISSUER` (with `MCP_RESOURCE_URL`) only if agents get client-credentials JWTs from Ory Hydra,
   and make `HYDRA_AUDIENCE` match the gateway's.
 - **Allow long requests.** `sneakers_test_secret` can hold a call open for up to 45 seconds while
   it waits for a connector; the server's write timeout is 90 seconds. A proxy in front needs a read
   timeout above 45 seconds.
 - **It is stateless.** Run as many replicas as you like behind a plain load balancer; no session
-  affinity is needed. Each replica keeps only its 30-second token cache and the Hydra keys.
+  affinity is needed. Each replica keeps only its 30-second token cache and the Ory Hydra keys.
 
 ## Start up
 
 At start the server:
 
 1. reads its configuration from the environment ([configuration.md](configuration.md)) and stops if
-   no bearer mode is on, `MCP_ACCEPT_API_TOKENS` isn't a boolean, or Hydra mode lacks
+   no bearer mode is on, `MCP_ACCEPT_API_TOKENS` isn't a boolean, or Ory Hydra mode lacks
    `MCP_RESOURCE_URL`;
 2. starts OpenTelemetry export to `OTEL_EXPORTER_OTLP_ENDPOINT`;
 3. builds the verifiers and the tool set (nothing is fetched yet: the JWKS is loaded on the first
    JWT, and the gateway is called on the first token);
 4. serves HTTP on `HTTP_PORT`.
 
-The start-up line `mcp starting` lists the port, which bearer modes are on, the Hydra issuer and
+The start-up line `mcp starting` lists the port, which bearer modes are on, the Ory Hydra issuer and
 audience, the resource URL and the gateway URL. A stop is a fatal log line and a non-zero exit.
 `SIGINT` or `SIGTERM` shuts the server down, giving open requests 5 seconds.
 
@@ -54,7 +54,7 @@ plain-text `parse url` lines when it holds the `host:port` form; export still wo
 
 `outcome` is `ok`, `unauthenticated`, `invalid_input`, `gateway_denied_or_failed` (a GraphQL error,
 such as a RACI denial), `gateway_http_<status>` or `error` (the gateway couldn't be reached or gave
-an unusable answer). `sub` is the Hydra subject, or the token label described in
+an unusable answer). `sub` is the Ory Hydra subject, or the token label described in
 [configuration.md](configuration.md).
 
 ## Common problems
