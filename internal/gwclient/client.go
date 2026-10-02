@@ -541,9 +541,11 @@ type Target struct {
 	Description  string `json:"description"`
 	OwnerUserID  string `json:"ownerUserId"`
 	SecretCount  int    `json:"secretCount"`
+	// SSHHostKeys are the target's pinned SSH host keys (OpenSSH public keys).
+	SSHHostKeys []string `json:"sshHostKeys"`
 }
 
-const targetFields = `id name hostname kind domain realm connectionId description ownerUserId secretCount`
+const targetFields = `id name hostname kind domain realm connectionId description ownerUserId secretCount sshHostKeys`
 
 const targetsQuery = `query Targets($query:String,$connectionId:ID){
   targetsForPrincipal(query:$query,connectionId:$connectionId){` + targetFields + `}
@@ -574,6 +576,9 @@ type TargetInput struct {
 	Realm        string `json:"realm,omitempty"`
 	ConnectionID string `json:"connectionId"`
 	Description  string `json:"description,omitempty"`
+	// SSHHostKeys is the whole pin list. nil leaves the field out, so an
+	// update keeps the target's pins; a pointer to an empty slice clears them.
+	SSHHostKeys *[]string `json:"sshHostKeys,omitempty"`
 }
 
 const saveTargetMutation = `mutation Save($input:MachineTargetInput!){ saveTargetForPrincipal(input:$input){` + targetFields + `} }`

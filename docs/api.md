@@ -41,8 +41,8 @@ and as the same JSON in the text content, for clients that read only text.
 | `sneakers_rename_folder` | write | A folder the caller can author, including in their own personal tree. |
 | `sneakers_set_secret_automation` | write | Turns rotation and heartbeat off or on; both flags are set on every call. |
 | `sneakers_list_connections` | read | The connection profiles (protocol, port, TLS) a target can bind to. |
-| `sneakers_list_targets` | read | Shared targets and the caller's own. |
-| `sneakers_save_target` | write | Creates a personal target, or updates one of the caller's own. The hostname is validated first. |
+| `sneakers_list_targets` | read | Shared targets and the caller's own, each with `hostKeyFingerprints`: the SHA256 fingerprints of its pinned SSH host keys. |
+| `sneakers_save_target` | write | Creates a personal target, or updates one of the caller's own. The hostname is validated first. `hostKeys` pins its SSH host keys (site admins only). |
 | `sneakers_set_secret_target` | write | Attaches or detaches a secret's target. |
 | `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason) or unreachable, never a value. |
 
@@ -64,6 +64,18 @@ request; after that it reports the check as pending. The vault allows one check 
 secret: when it refuses with `ResourceExhausted`, the tool returns the latest result instead. When
 the vault reports that no connector is available in this environment, the tool returns
 `available: false` with a message, without waiting. Other errors are tool errors.
+
+### SSH host keys
+
+The SSH broker connects only to a host that presents one of its target's pinned SSH host keys, and
+refuses a target with none. `sneakers_save_target` takes `hostKeys`, the whole pin list: one
+OpenSSH public key per entry, the line from the host's `/etc/ssh/ssh_host_ed25519_key.pub` (or
+another `ssh_host_*_key.pub`). Leave it out to keep the target's current pins, send `[]` to clear
+them. The vault checks every key and lets only a human site admin change the pins, so a token gets
+`PermissionDenied` when it sends a different list. Before the call leaves the MCP server, more than
+16 keys, an empty or over-long entry, or a private key is refused, and the error names the entry
+by position only. Results show pins as `hostKeyFingerprints` (as `ssh-keygen -l` prints them),
+never the keys; an empty list means the target isn't pinned.
 
 ### The SSH broker
 
