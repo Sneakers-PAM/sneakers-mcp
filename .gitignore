@@ -1,4 +1,8 @@
 /bin/
+/mcp
+/sneakers-run
+/sneakers-put
+dist/
 *.test
 *.out
 coverage.*

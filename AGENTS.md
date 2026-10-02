@@ -5,36 +5,38 @@ hook-enforced rules). Keep this file current when the build, layout, or public A
 
 ## What this is
 
-Sneakers MCP server for AI agents, plus the sneakers-run and sneakers-put CLIs
-
-<!-- Fill in: what the project does, what it ships (library, service, action, CLI), and the one or
-two things an agent must understand before changing it. -->
-
-## Using sneakers-mcp
-
-<!-- If this project is consumed by others (a library/plugin/action), describe the contract a
-consumer must respect: the single entry point, the public surface, required options, and anything
-that must not be bypassed. Delete this section for a leaf application. -->
+Sneakers MCP server: the bridge that lets AI agents use the vault over MCP (Streamable HTTP,
+stateless), plus two local commands for people, `sneakers-run` and `sneakers-put`. A leaf HTTP
+service with no database: it checks each caller's bearer (Hydra JWTs locally, API and personal
+tokens through the gateway) and turns every tool call into one or more calls to the gateway's
+`/machine/graphql` with that same token. Before changing it, know the rules it keeps: it holds no
+credentials and makes no access decisions (the gateway and vault do); every bearer check fails
+closed with a bare `401`; tokens, tool arguments and secret values are never logged; values that
+already exist on disk go through `sneakers-put`, never through a tool call; and nothing in it may
+reach the SSH broker service.
 
 ## Layout
 
-<!-- The directories that matter and what lives in each. Keep it short; point at the entry points. -->
-
-- `src/` - <what>
-- `<tests dir>/` - <what>
+- `cmd/mcp/` - the server entrypoint: environment, the bearer modes, the routes and the
+  protected-resource metadata.
+- `cmd/sneakers-run/`, `cmd/sneakers-put/` - the two local commands.
+- `internal/authn/` - classifies a bearer by shape and confirms API and personal tokens with the
+  gateway, with a short positive cache keyed by the token's SHA-256.
+- `internal/hydra/` - the Hydra JWT verifier (JWKS fetch and cache).
+- `internal/tools/` - the MCP tools; each is a thin mapping onto the gateway client.
+- `internal/gwclient/` - the machine GraphQL client; every call takes the caller's token.
+- `internal/cliauth/` - the token and URL rules both commands share.
+- `internal/secretrun/`, `internal/secretput/` - the logic behind the two commands.
+- `scripts/cli-dist.sh` - cross-builds the commands into `dist/`.
+- `docs/` - configuration, API, runbook and the command pages.
 
 ## Build, test, lint
 
-<!-- The exact commands. Pull these from package.json scripts (npm), the Taskfile (Go/Task), or
-pyproject (Python) so they stay accurate. -->
-
-- Build: `<command>`
-- Test: `<command>` (note any service/fixture the integration tests require)
-- Lint: `<command>`
-- Package checks (npm packages), after a build: `npm run check:pack` (contents and ceiling),
-  `npm run check:pack:growth` (growth against the last release), `npm run check:install`
-  (install the tarball, import ESM and CJS); see CLAUDE.md "npm package contents"
-- License headers / docs: `<command>`
+- Build: `task build`
+- Test: `task test`; the gateway and the JWKS are `httptest` servers, so nothing else is needed.
+- Lint: `task lint`.
+- Commands: `./scripts/cli-dist.sh` builds both for linux and darwin, amd64 and arm64.
+- License headers: `task license` (golic, the Apache-2.0 SPDX header in `.golic.yaml`).
 
 ## Logging
 
@@ -56,4 +58,11 @@ Follow the logging rules in `CLAUDE.md`. In short:
   `.claude/hooks` (run `bash .claude/hooks/install.sh` once per clone).
 - Open every PR as a draft. CI skips drafts, so run the full checks locally, push once they pass,
   and mark the PR ready when the work is finished; see CLAUDE.md "CI and Actions minutes".
-- <project-specific conventions, non-obvious constraints, and traps an agent should know>
+- Every commit carries a DCO sign-off (`git commit -s`); the `checks / scrub` job fails without it.
+- No real identifiers anywhere: fixtures use example.org, 192.0.2.0/24, 2001:db8::/32 and invented
+  names.
+- The contract with the gateway is its machine GraphQL schema in `Sneakers-PAM/sneakers-gateway`
+  (`graphql/machine.graphqls`); there is no Go dependency on it. A new tool needs the matching
+  field there first.
+- Match gateway errors on the gRPC code inside the message (`rpc error: code = <Code> desc = ...`),
+  never on the words after `desc =`, which the services may reword.
