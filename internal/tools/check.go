@@ -72,9 +72,31 @@ func isNoConnector(err error) bool {
 	return errors.As(err, &ge) && strings.Contains(ge.Error(), "no connector is available in this environment")
 }
 
+// isRateLimited matches the vault's per-secret check limit by its gRPC code,
+// which the gateway relays as "rpc error: code = <Code> desc = <text>"; the
+// text after desc is free to change.
 func isRateLimited(err error) bool {
 	var ge *gwclient.GraphQLError
-	return errors.As(err, &ge) && strings.Contains(ge.Error(), "ResourceExhausted")
+	if !errors.As(err, &ge) {
+		return false
+	}
+	for _, m := range ge.Messages {
+		if grpcCode(m) == "ResourceExhausted" {
+			return true
+		}
+	}
+	return false
+}
+
+// grpcCode returns the code name from a relayed gRPC status message, or ""
+// when the message isn't one.
+func grpcCode(msg string) string {
+	_, rest, ok := strings.Cut(msg, "rpc error: code = ")
+	if !ok {
+		return ""
+	}
+	code, _, _ := strings.Cut(rest, " ")
+	return code
 }
 
 func (t *toolset) latestCheck(ctx context.Context, token, secretID string) (testSecretOut, error) {

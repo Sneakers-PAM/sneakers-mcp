@@ -65,11 +65,18 @@ func TestTestSecretReportsPendingWhenNoConnectorAnswers(t *testing.T) {
 }
 
 func TestTestSecretWhenRateLimitedReturnsTheLastResult(t *testing.T) {
-	srv := checkGateway(t, `{"data":null,"errors":[{"message":"rpc error: code = ResourceExhausted desc = a check was requested in the last minute; read the status instead"}]}`,
+	srv := checkGateway(t, `{"data":null,"errors":[{"message":"rpc error: code = ResourceExhausted desc = the last check request was under a minute ago; read the status instead"}]}`,
 		`{"result":"OK","checkedAtUnix":1790000030,"detail":"","pending":false}`)
 	_, out, err := fastChecks(newTools(srv.URL, nil)).testSecret(context.Background(), callReq("Bearer t"), testSecretIn{SecretID: "s1"})
 	if err != nil || out.Result != "ok" || !strings.Contains(out.Message, "minute") {
 		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestTestSecretMatchesTheRateLimitByItsCodeOnly(t *testing.T) {
+	srv := checkGateway(t, `{"data":null,"errors":[{"message":"rpc error: code = Unavailable desc = upstream ResourceExhausted"}]}`, `{}`)
+	if _, _, err := fastChecks(newTools(srv.URL, nil)).testSecret(context.Background(), callReq("Bearer t"), testSecretIn{SecretID: "s1"}); err == nil || !strings.Contains(err.Error(), "Unavailable") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
