@@ -30,10 +30,18 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "gofmt needed on:"; echo "$unformatted"; exit 1
           fi
+      - name: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - name: Build
         run: go build ./...
+      - name: Vet
+        run: go vet ./...
       - name: Test
-        run: go test ./... -cover
+        run: go test -count=1 ./... -cover
+      - name: Cross-build the commands
+        run: ./scripts/cli-dist.sh
   lint:
     name: 🧹 GolangCI
     if: github.event.pull_request.draft == false
