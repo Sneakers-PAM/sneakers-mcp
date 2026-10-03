@@ -66,3 +66,8 @@ Follow the logging rules in `CLAUDE.md`. In short:
   field there first.
 - Match gateway errors on the gRPC code inside the message (`rpc error: code = <Code> desc = ...`),
   never on the words after `desc =`, which the services may reword.
+- `go.mod` holds tagged releases only: no `replace` directive, and no pseudo-version (`@main`,
+  `@<sha>`) of a `github.com/Bugs5382/*` or `github.com/Sneakers-PAM/*` module; the
+  `proto-sync / check` job fails on either. To compile and test against a local package checkout,
+  use a git-ignored `go.work` beside `go.mod` (`go work init . ../go-<pkg>`, which writes
+  `use . ../go-<pkg>`); `go.work` and `go.work.sum` are in `.gitignore`.
