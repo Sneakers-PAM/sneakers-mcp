@@ -59,6 +59,19 @@ type SecretSummary struct {
 
 	// Placement is set on a create or generate only.
 	Placement *Placement `json:"placement,omitempty"`
+
+	// The change signals: never a value. ValueVersion goes up whenever the
+	// stored values change; the rest say whether and how the vault rotates and
+	// checks the secret, and what happened last.
+	ValueVersion        int     `json:"valueVersion"`
+	ValueChangedAt      *string `json:"valueChangedAt,omitempty"`
+	RotationEnabled     bool    `json:"rotationEnabled"`
+	RotatesOnCheckin    bool    `json:"rotatesOnCheckin"`
+	HeartbeatEnabled    bool    `json:"heartbeatEnabled"`
+	LastRotationResult  *string `json:"lastRotationResult,omitempty"`
+	RotatedAt           *string `json:"rotatedAt,omitempty"`
+	NextRotationAt      *string `json:"nextRotationAt,omitempty"`
+	LastHeartbeatResult *string `json:"lastHeartbeatResult,omitempty"`
 }
 
 // Placement is where the gateway stored a new secret and why. A personal
@@ -78,7 +91,9 @@ const placementFields = ` placement{folderId requestedFolderId rule reason}`
 
 // summaryFields is the selection every SecretSummary result uses, so no
 // operation drops a field the others return.
-const summaryFields = `id name folderId typeId targetId rotationOptOut heartbeatOptOut`
+const summaryFields = `id name folderId typeId targetId rotationOptOut heartbeatOptOut ` +
+	`valueVersion valueChangedAt rotationEnabled rotatesOnCheckin heartbeatEnabled ` +
+	`lastRotationResult rotatedAt nextRotationAt lastHeartbeatResult`
 
 // Automation opts a new secret out of rotation and/or heartbeat, so a
 // credential that must never rotate never gets a schedule. KeepFolder opts
@@ -206,16 +221,23 @@ func scrubURLError(err error) error {
 	return err
 }
 
-const findQuery = `query Find($query:String,$folderId:ID,$typeId:ID){
-  findSecretsForPrincipal(query:$query,folderId:$folderId,typeId:$typeId){` + summaryFields + `}
+const findQuery = `query Find($query:String,$folderId:ID,$typeId:ID,$changedSince:String){
+  findSecretsForPrincipal(query:$query,folderId:$folderId,typeId:$typeId,changedSince:$changedSince){` + summaryFields + `}
 }`
 
 // FindSecrets lists metadata of secrets the caller may read.
 func (c *Client) FindSecrets(ctx context.Context, token, query, folderID, typeID string) ([]SecretSummary, error) {
+	return c.FindSecretsChangedSince(ctx, token, query, folderID, typeID, "")
+}
+
+// FindSecretsChangedSince is FindSecrets keeping only secrets whose value
+// changed at or after changedSince (RFC3339; empty means no such filter).
+func (c *Client) FindSecretsChangedSince(ctx context.Context, token, query, folderID, typeID, changedSince string) ([]SecretSummary, error) {
 	var out struct {
 		Find []SecretSummary `json:"findSecretsForPrincipal"`
 	}
-	vars := map[string]any{"query": nilIfEmpty(query), "folderId": nilIfEmpty(folderID), "typeId": nilIfEmpty(typeID)}
+	vars := map[string]any{"query": nilIfEmpty(query), "folderId": nilIfEmpty(folderID), "typeId": nilIfEmpty(typeID),
+		"changedSince": nilIfEmpty(changedSince)}
 	if err := c.do(ctx, token, findQuery, vars, &out); err != nil {
 		return nil, err
 	}
@@ -285,6 +307,22 @@ func (c *Client) ListSecretTypes(ctx context.Context, token string) ([]SecretTyp
 		out.Types = []SecretType{}
 	}
 	return out.Types, nil
+}
+
+const getSecretQuery = `query Get($id:ID!){ secretForPrincipal(id:$id){` + summaryFields + `} }`
+
+// GetSecret returns one secret's metadata, never its values.
+func (c *Client) GetSecret(ctx context.Context, token, id string) (*SecretSummary, error) {
+	var out struct {
+		Secret *SecretSummary `json:"secretForPrincipal"`
+	}
+	if err := c.do(ctx, token, getSecretQuery, map[string]any{"id": id}, &out); err != nil {
+		return nil, err
+	}
+	if out.Secret == nil {
+		return nil, errors.New("gateway returned no secret")
+	}
+	return out.Secret, nil
 }
 
 const revealQuery = `mutation Reveal($id:ID!,$fieldKey:String!){ revealSecretFieldForPrincipal(id:$id,fieldKey:$fieldKey) }`
