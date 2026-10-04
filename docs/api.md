@@ -32,8 +32,8 @@ and as the same JSON in the text content, for clients that read only text.
 | `sneakers_list_secret_types` | read | The type catalog: ids and fields (kind, required, sensitive). |
 | `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the secret needs approval for each personal-token reveal, it returns `approvalRequired`, an `approvalUrl`, a `useId`, a `runId` and the run's `pending` list instead of a value. Optional `runId` and `task` group one task's requests on one approval page. |
 | `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. |
-| `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. |
-| `sneakers_generate_secret` | write | A new secret with a policy-compliant generated password, returned only when `returnValue` is true. |
+| `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. A secret that names you goes to your Personal folder unless `keepFolder` is true; see [Placement](#placement). |
+| `sneakers_generate_secret` | write | A new secret with a policy-compliant generated password, returned only when `returnValue` is true. Same placement and `keepFolder` as create. |
 | `sneakers_update_secret` | write | Sets non-sensitive fields of an existing secret. See [sneakers-update-secret.md](sneakers-update-secret.md). |
 | `sneakers_move_secret` | destructive | Moves a secret to another folder, which changes who can reach it. Author on both folders; never into a personal folder. |
 | `sneakers_change_secret_type` | destructive | Re-keys a secret into another type. Never drops a value: one with no field in the new type is appended to its notes field as `[moved from <key>]: <JSON string>`, or the call fails. The result's `automation` says what happened to rotation, heartbeat and the target. |
@@ -184,3 +184,16 @@ oidcSubject, allowedGroups)` takes ids or exact names, refuses anything that doe
 exactly one group, and stores ids. An empty `allowedGroups` grants no groups. For example, an Ory
 Hydra client with `scope: "group-helpdesk platform-team"` and `allowedGroups: ["Help Desk", "Platform
 Team"]`. API tokens from `mintApiToken` use the same grammar; their mint-time scope is the bound.
+
+## Placement
+
+A new secret from `sneakers_create_secret`, `sneakers_generate_secret` or
+`sneakers-put` whose name, or a username, login, email or account field, names
+the token's owner (their username as a whole word, or their email, ignoring
+case) goes to the owner's Personal folder instead of `folderId`, because a
+token can't move it there later. `keepFolder` (`-keep-folder` for
+sneakers-put) keeps `folderId`. The result's `placement` gives the folder
+used, the folder asked for, the rule (`REQUESTED`, `PERSONAL_DEFAULT`,
+`KEPT_BY_CALLER`, `ALREADY_PERSONAL` or `NO_PERSONAL_FOLDER`) and the reason,
+which names the matching part, never a value. The gateway decides; this needs
+the gateway's `keepFolder` argument and `SecretSummary.placement`.

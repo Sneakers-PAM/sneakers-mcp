@@ -43,17 +43,22 @@ with values read from files or stdin, so a value never passes through an
 agent session or the shell history.
 
 Usage:
-  sneakers-put -folder <folder id> -type <type id> -name <name> [-disable-rotation] -field ... [-field ...]
+  sneakers-put -folder <folder id> -type <type id> -name <name> [-disable-rotation] [-keep-folder] -field ... [-field ...]
   sneakers-put -id <secret id> -field ... [-field ...]
 
 Create mode (-folder, -type, -name) makes a new secret. Update mode (-id)
 writes a new version of an existing secret with the fields given.
+
+A new secret whose name, or a username, login, email or account field, names
+you goes to your Personal folder instead of -folder, unless you pass
+-keep-folder. The output then says which folder it went to and why.
 
 Flags:
   -folder <id>          create: destination folder id
   -type <id>            create: secret type id
   -name <name>          create: name of the new secret
   -disable-rotation     create: store the secret with rotation turned off
+  -keep-folder          create: use -folder even when the secret names you
   -id <id>              update: id of the secret to update
   -field <spec>         a field to set; repeatable, at least one
   -insecure-localhost   allow an http:// SNEAKERS_URL on localhost (testing only)
@@ -78,6 +83,7 @@ Examples:
 type flags struct {
 	folder, typ, name, id          *string
 	disableRotation, insecureLocal *bool
+	keepFolder                     *bool
 	raw                            *rawFields
 }
 
@@ -90,6 +96,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		name:            fs.String("name", "", "create: name of the new secret"),
 		id:              fs.String("id", "", "update: id of the secret to update"),
 		disableRotation: fs.Bool("disable-rotation", false, "create: turn rotation off"),
+		keepFolder:      fs.Bool("keep-folder", false, "create: keep -folder even when the secret names you"),
 		insecureLocal:   fs.Bool("insecure-localhost", false, "allow http:// to localhost (testing only)"),
 		raw:             &rawFields{},
 	}
@@ -109,7 +116,7 @@ func parse(args []string, getenv func(string) string) (config, error) {
 	if err != nil {
 		return config{}, err
 	}
-	if err := checkMode(*f.id, *f.folder, *f.typ, *f.name, *f.disableRotation); err != nil {
+	if err := checkMode(*f.id, *f.folder, *f.typ, *f.name, *f.disableRotation || *f.keepFolder); err != nil {
 		return config{}, err
 	}
 	specs := make([]secretput.FieldSpec, 0, len(*f.raw))
@@ -124,15 +131,15 @@ func parse(args []string, getenv func(string) string) (config, error) {
 		return config{}, err
 	}
 	return config{endpoint: endpoint, req: secretput.Request{
-		Token: token, FolderID: *f.folder, TypeID: *f.typ, Name: *f.name, DisableRotation: *f.disableRotation,
+		Token: token, FolderID: *f.folder, TypeID: *f.typ, Name: *f.name, DisableRotation: *f.disableRotation, KeepFolder: *f.keepFolder,
 		SecretID: *f.id, Fields: specs,
 	}}, nil
 }
 
-func checkMode(id, folder, typ, name string, disableRotation bool) error {
+func checkMode(id, folder, typ, name string, createOptions bool) error {
 	if id != "" {
-		if folder != "" || typ != "" || name != "" || disableRotation {
-			return errors.New("-id updates a secret; -folder, -type, -name and -disable-rotation are for a create")
+		if folder != "" || typ != "" || name != "" || createOptions {
+			return errors.New("-id updates a secret; -folder, -type, -name, -disable-rotation and -keep-folder are for a create")
 		}
 		return nil
 	}
@@ -161,6 +168,9 @@ func run(args []string, getenv func(string) string, stdin io.Reader, stdout, std
 		return 1
 	}
 	_, _ = fmt.Fprintf(stdout, "id: %s\nname: %s\n", res.ID, res.Name)
+	if p := res.Placement; p != nil {
+		_, _ = fmt.Fprintf(stdout, "folder: %s\nplacement: %s: %s\n", p.FolderID, p.Rule, p.Reason)
+	}
 	if c.req.SecretID != "" {
 		_, _ = fmt.Fprintf(stdout, "changed: %s\n", strings.Join(res.Changed, ","))
 	}

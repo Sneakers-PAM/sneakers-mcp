@@ -56,6 +56,8 @@ On success it prints only:
 id: <secret id>
 name: <secret name>
 changed: <field keys>      # update only
+folder: <folder id>        # create, when the gateway reports a placement
+placement: <rule>: <reason>
 ```
 
 It never prints a value. If a gateway error happens to quote a value you
@@ -74,8 +76,14 @@ supplied from a file or stdin, that value is replaced with `[redacted]`.
   a new version, so earlier values stay in history. On types the vault
   manages (rotation, heartbeat, checkout, certificate) only `notes` and
   `description` can be changed this way; the vault rotates the rest.
-- `-disable-rotation` is for creates only. To change rotation or heartbeat
-  on an existing secret, use the MCP tool `sneakers_set_secret_automation`.
+- `-disable-rotation` and `-keep-folder` are for creates only. To change
+  rotation or heartbeat on an existing secret, use the MCP tool
+  `sneakers_set_secret_automation`.
+- A new secret whose name, or a username, login, email or account field,
+  names you goes to your Personal folder, not `-folder`; `-keep-folder` keeps
+  `-folder` (say, for a shared admin account that carries your name). The
+  `placement` line names the rule and the reason; see
+  [api.md](api.md#placement).
 
-It uses the gateway's `createSecretForPrincipal` (with `disableRotation`)
-and `updateSecretFieldsForPrincipal`.
+It uses the gateway's `createSecretForPrincipal` (with `disableRotation` and
+`keepFolder`) and `updateSecretFieldsForPrincipal`.

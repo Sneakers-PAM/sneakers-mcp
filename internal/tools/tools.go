@@ -503,9 +503,25 @@ type createSecretIn struct {
 
 	DisableRotation  bool `json:"disableRotation,omitempty" jsonschema:"create the secret with rotation turned off; use it for credentials that must never rotate"`
 	DisableHeartbeat bool `json:"disableHeartbeat,omitempty" jsonschema:"create the secret with heartbeat checks turned off"`
+	KeepFolder       bool `json:"keepFolder,omitempty" jsonschema:"store the secret in folderId even when its name or a username, login, email or account field names you; without it such a secret goes to your Personal folder"`
 }
 type createSecretOut struct {
-	Secret secretSummary `json:"secret"`
+	Secret    secretSummary `json:"secret"`
+	Placement *placement    `json:"placement,omitempty" jsonschema:"where the secret was stored and why"`
+}
+
+type placement struct {
+	FolderID          string `json:"folderId" jsonschema:"the folder the secret was stored in"`
+	RequestedFolderID string `json:"requestedFolderId" jsonschema:"the folderId the call asked for"`
+	Rule              string `json:"rule" jsonschema:"REQUESTED, PERSONAL_DEFAULT, KEPT_BY_CALLER, ALREADY_PERSONAL or NO_PERSONAL_FOLDER"`
+	Reason            string `json:"reason" jsonschema:"why, in words; names the matching part, never a value"`
+}
+
+func placementOf(p *gwclient.Placement) *placement {
+	if p == nil {
+		return nil
+	}
+	return &placement{FolderID: p.FolderID, RequestedFolderID: p.RequestedFolderID, Rule: p.Rule, Reason: p.Reason}
 }
 
 func (t *toolset) createSecret(ctx context.Context, req *mcp.CallToolRequest, in createSecretIn) (*mcp.CallToolResult, createSecretOut, error) {
@@ -520,9 +536,9 @@ func (t *toolset) createSecret(ctx context.Context, req *mcp.CallToolRequest, in
 		},
 		func(token string) error {
 			s, err := t.gw.CreateSecret(ctx, token, in.FolderID, in.TypeID, in.Name, fieldsOf(in.Fields), in.TargetID,
-				gwclient.Automation{DisableRotation: in.DisableRotation, DisableHeartbeat: in.DisableHeartbeat})
+				gwclient.Automation{DisableRotation: in.DisableRotation, DisableHeartbeat: in.DisableHeartbeat, KeepFolder: in.KeepFolder})
 			if err == nil {
-				out.Secret = summaryOf(*s)
+				out.Secret, out.Placement = summaryOf(*s), placementOf(s.Placement)
 			}
 			return err
 		})
@@ -545,10 +561,12 @@ type generateSecretIn struct {
 
 	DisableRotation  bool `json:"disableRotation,omitempty" jsonschema:"create the secret with rotation turned off; use it for credentials that must never rotate"`
 	DisableHeartbeat bool `json:"disableHeartbeat,omitempty" jsonschema:"create the secret with heartbeat checks turned off"`
+	KeepFolder       bool `json:"keepFolder,omitempty" jsonschema:"store the secret in folderId even when its name or a username, login, email or account field names you; without it such a secret goes to your Personal folder"`
 }
 type generateSecretOut struct {
 	Secret         secretSummary `json:"secret"`
 	GeneratedValue string        `json:"generatedValue,omitempty"`
+	Placement      *placement    `json:"placement,omitempty" jsonschema:"where the secret was stored and why"`
 }
 
 func (t *toolset) generateSecret(ctx context.Context, req *mcp.CallToolRequest, in generateSecretIn) (*mcp.CallToolResult, generateSecretOut, error) {
@@ -564,9 +582,9 @@ func (t *toolset) generateSecret(ctx context.Context, req *mcp.CallToolRequest, 
 		},
 		func(token string) error {
 			s, val, err := t.gw.GenerateSecret(ctx, token, in.FolderID, in.TypeID, in.Name, fieldsOf(in.Fields), in.PolicyID, in.TargetID, in.ReturnValue,
-				gwclient.Automation{DisableRotation: in.DisableRotation, DisableHeartbeat: in.DisableHeartbeat})
+				gwclient.Automation{DisableRotation: in.DisableRotation, DisableHeartbeat: in.DisableHeartbeat, KeepFolder: in.KeepFolder})
 			if err == nil {
-				out = generateSecretOut{Secret: summaryOf(*s), GeneratedValue: val}
+				out = generateSecretOut{Secret: summaryOf(*s), GeneratedValue: val, Placement: placementOf(s.Placement)}
 			}
 			return err
 		})
