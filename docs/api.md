@@ -5,7 +5,7 @@
 | Route | Auth | What it does |
 |---|---|---|
 | `POST /mcp` | bearer | MCP over Streamable HTTP, stateless mode. Requests are capped at 1 MiB and must pass Go's cross-origin protection. |
-| `GET /health` | none | `{"status":"ok"}`, for probes. Not logged. |
+| `GET /health` | none | `{"status":"ok","version":"<tag>","commit":"<sha>"}`, for probes and the gateway's diagnostics. Not logged. |
 | `GET /.well-known/oauth-protected-resource` and `.../oauth-protected-resource/mcp` | none | RFC 9728 protected-resource metadata. Served only when `MCP_RESOURCE_URL` is set. |
 
 A missing or rejected bearer on `/mcp` gets `401` with a `WWW-Authenticate` header that points at
