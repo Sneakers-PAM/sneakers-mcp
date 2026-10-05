@@ -3,6 +3,7 @@ module github.com/Sneakers-PAM/sneakers-mcp
 go 1.26.6
 
 require (
+	github.com/Bugs5382/go-buildinfo v1.0.0
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/Bugs5382/go-otel v1.3.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -42,6 +43,6 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

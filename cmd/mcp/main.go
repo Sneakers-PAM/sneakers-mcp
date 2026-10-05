@@ -11,19 +11,18 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	buildinfo "github.com/Bugs5382/go-buildinfo"
 	log "github.com/Bugs5382/go-log"
 	otel "github.com/Bugs5382/go-otel"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -44,29 +43,6 @@ const (
 	maxRequestBodyBytes = 1 << 20
 	metadataPath        = "/.well-known/oauth-protected-resource"
 )
-
-// version and commit are stamped at image build with
-// -ldflags "-X main.version=<tag> -X main.commit=<sha>".
-var (
-	version = "dev"
-	commit  = ""
-)
-
-// buildCommit is the stamped commit, else the VCS revision Go records when it
-// builds from a git checkout, else "unknown".
-func buildCommit() string {
-	if commit != "" {
-		return commit
-	}
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		for _, s := range bi.Settings {
-			if s.Key == "vcs.revision" && s.Value != "" {
-				return s.Value
-			}
-		}
-	}
-	return "unknown"
-}
 
 // env returns the environment value for k, or def when unset/empty.
 func env(k, def string) string {
@@ -110,7 +86,7 @@ func loadConfig() (config, error) {
 		HydraAudience: env("HYDRA_AUDIENCE", "sneakers-mcp"),
 		ResourceURL:   env("MCP_RESOURCE_URL", ""),
 		GatewayURL:    env("GATEWAY_MACHINE_GRAPHQL_URL", "http://sneakers-gateway:9100/machine/graphql"),
-		Version:       env("SERVICE_VERSION", version),
+		Version:       env("SERVICE_VERSION", buildinfo.Get().Version),
 
 		AuthorizationServer: env("MCP_AUTHORIZATION_SERVER", ""),
 	}
@@ -228,19 +204,21 @@ func buildHandler(cfg config, logger zerolog.Logger) (http.Handler, error) {
 		&mcp.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: maxRequestBodyBytes},
 	)
 	mux := newMux(streamable, authMW, metadata)
-	mountHealth(mux, newHealthChecker(cfg, logger))
+	checker, err := newHealthChecker(cfg, log.NewLogger(serviceName))
+	if err != nil {
+		return nil, err
+	}
+	if err := mountHealth(mux, checker); err != nil {
+		return nil, err
+	}
 	return withLogging(mux, logger), nil
 }
 
-// newMux builds the service's routes. /health is unauthenticated (the
-// gateway's diagnostics read it; /livez and /readyz are added beside it); /mcp is always behind the bearer middleware. The RFC 9728
-// metadata routes exist only when metadata is non-nil.
+// newMux builds the service's routes; mountHealth adds the unauthenticated
+// /livez and /readyz. /mcp is always behind the bearer middleware. The RFC
+// 9728 metadata routes exist only when metadata is non-nil.
 func newMux(streamable http.Handler, authMW func(http.Handler) http.Handler, metadata *oauthex.ProtectedResourceMetadata) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "version": version, "commit": buildCommit()})
-	})
 	if metadata != nil {
 		md := auth.ProtectedResourceMetadataHandler(metadata)
 		mux.Handle(metadataPath, md)

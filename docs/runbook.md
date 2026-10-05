@@ -39,9 +39,8 @@ audience, the resource URL and the gateway URL. A stop is a fatal log line and a
   so a gateway or Hydra outage never restarts the pod.
 - `GET /readyz` is readiness. It answers `503` while a required dependency is down, and `200`
   otherwise, recovering on its own. Checks are cached for 5 seconds; each has a 1-second timeout.
-- `GET /health` answers `{"status":"ok","version":"<tag>","commit":"<sha>"}` whenever the process
-  is serving. The gateway's diagnostics read the version from it. It is no longer the right probe
-  for readiness.
+- Both carry the build in `Sneakers-Version` and `Sneakers-Commit` headers (go-buildinfo); the
+  gateway's diagnostics read them from `/livez`. There is no plain `/health` route.
 
 The dependencies:
 
@@ -50,14 +49,15 @@ The dependencies:
 | `gateway` | yes | Every tool call is a machine GraphQL call to the gateway, so the server can't do anything without it. Checked with `GET /readyz` on the origin of `GATEWAY_MACHINE_GRAPHQL_URL`, without a token. |
 | `hydra-jwks` | only when Hydra is the only bearer mode | It verifies Hydra bearers. With `MCP_ACCEPT_API_TOKENS` on, API-token callers still work while it's down, so it only degrades readiness. Listed only when `HYDRA_ISSUER` is set; checked with `GET` on `HYDRA_JWKS_URL`. |
 
-Each state change logs one line: `health: dependency failing` at warn (with the error class) or
-`health: dependency recovered` at info. Neither carries an address or the error text.
+Each state change logs one line: `dependency check failing` at warn (with the error class) or
+`dependency recovered` at info. Neither carries an address or the error text.
 
-The kubelet probes are set in sneakers-release's chart. Until it sends liveness to `/livez` and
-readiness to `/readyz`, both probes use the same check.
+The kubelet probes are set in sneakers-release's chart: liveness on `/livez`, readiness on
+`/readyz`.
 
-`version` and `commit` are the binary's build, stamped by the image build from its `VERSION` and
-`COMMIT` build arguments (`dev`, and Go's VCS revision or `unknown`, when unstamped).
+The version and commit are the binary's build, stamped by the image build from its `VERSION` and
+`COMMIT` build arguments into go-buildinfo's `Version` and `Commit` (`dev`, and Go's VCS revision
+or `unknown`, when unstamped).
 `SERVICE_VERSION` changes only the version in MCP `serverInfo`, never this answer.
 
 ```bash
@@ -70,7 +70,7 @@ JSON on stderr by default. The lines to know:
 
 | Message | Fields | Meaning |
 |---|---|---|
-| `http` | `method`, `path`, `status`, `dur` | One per request, except `/health`. Never headers or bodies. |
+| `http` | `method`, `path`, `status`, `dur` | One per request, except `/livez` and `/readyz`. Never headers or bodies. |
 | `mcp tool call` | `tool`, `sub`, `outcome`, `dur` | One per tool call. Never arguments or results. |
 | `mcp bearer rejected` | `reason`, `path` | A bearer was refused (warn). The reason names the check that failed, never the token. |
 
