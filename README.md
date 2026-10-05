@@ -75,6 +75,10 @@ task license  # check the Apache-2.0 headers (golic)
 - [docs/runbook.md](docs/runbook.md): operating the service.
 - [docs/sneakers-run.md](docs/sneakers-run.md), [docs/sneakers-put.md](docs/sneakers-put.md) and [docs/sneakers-update-secret.md](docs/sneakers-update-secret.md).
 
+## 🙏 Acknowledgements
+
+Sneakers-PAM was originally written by [@Bugs5382](https://github.com/Bugs5382).
+
 ## ⚖️ License
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
