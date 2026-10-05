@@ -31,7 +31,7 @@ and as the same JSON in the text content, for clients that read only text.
 | `sneakers_find_secrets` | read | Secrets the caller may read, by name substring, folder or type. Metadata only, never values. |
 | `sneakers_list_folders` | read | Folders the caller may read, with path and `canAuthor`. |
 | `sneakers_list_secret_types` | read | The type catalog: ids and fields (kind, required, sensitive). |
-| `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the secret needs approval for each personal-token reveal, it returns `approvalRequired`, an `approvalUrl` and a `useId` instead of a value. |
+| `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the secret needs approval for each personal-token reveal, it returns `approvalRequired`, an `approvalUrl`, a `useId`, a `runId` and the run's `pending` list instead of a value. Optional `runId` and `task` group one task's requests on one approval page. |
 | `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. |
 | `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. |
 | `sneakers_generate_secret` | write | A new secret with a policy-compliant generated password, returned only when `returnValue` is true. |
@@ -57,6 +57,41 @@ returns its `approvalUrl` and `useId`. The result tells the agent to open the pa
 browser at once with its own opener (`$BROWSER`, `xdg-open` or `open`): the server can't open
 anything on the user's machine, and a link left in a transcript tends to expire unseen. After the
 owner approves with their second factor, `sneakers_redeem_reveal` collects the value once.
+
+### One approval page per run
+
+The requests one task raises share a run, so the owner approves them on one page with one second
+factor instead of one visit per secret. The server is stateless, so the agent carries the run:
+
+- The first `sneakers_get_secret` that needs approval, called without `runId`, starts a run: the
+  bridge mints an id (`run_` and 128 random bits in base32) and returns it as `runId`.
+- The agent passes that `runId` on every later request of the same task, asks for every secret the
+  task needs first, and then opens `approvalUrl` once. A new task starts without a `runId`.
+- `runId` must be 1 to 64 letters, digits, `_` or `-`; anything else is an input error.
+- `task` is one line saying what the agent is doing. It is sent to vault as the use's purpose and
+  shown to the owner as plain text. The bridge drops invalid UTF-8 and control characters,
+  collapses whitespace to single spaces and cuts it to 200 characters before sending it.
+- `pending` lists every use still waiting in the run (`useId`, `secretName`, `fieldKey`, `reveal`,
+  `expiresAtUnix`), read from the gateway's `secretUseRun`. If the gateway can't list the run, it
+  holds just the use this call raised.
+- `approvalUrl` is the gateway's link for the run: `/approvals/run/<runId>` once the gateway's
+  `APPROVAL_RUN_LINKS` is on, the Approvals list before that.
+- Each approved use is still collected on its own with `sneakers_redeem_reveal`, within 60 seconds
+  of approval.
+
+```json
+{
+  "approvalRequired": true,
+  "runId": "run_...",
+  "approvalUrl": "https://sneakers.example.org/approvals/run/run_...",
+  "useId": "use_...",
+  "pending": [{ "useId": "use_...", "secretName": "db-admin", "fieldKey": "password", "reveal": true, "expiresAtUnix": 1790000000 }],
+  "message": "..."
+}
+```
+
+Runs cover personal tokens only, the same as token approval: service accounts are never held for
+approval, so they have nothing to batch.
 
 Token approval covers personal tokens only. A service-account token's reveal is never held for
 approval: it is governed by the account's access rules and the vault's "Allow API access to

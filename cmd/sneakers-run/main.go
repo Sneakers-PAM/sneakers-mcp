@@ -7,7 +7,7 @@
 // grant they created covers it), and it is masked in the command's output.
 //
 //	SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_... \
-//	  sneakers-run -secret <id> [-field password] [-inject stdin|file] [-no-open] -- <command> [args...]
+//	  sneakers-run -secret <id> [-field password] [-inject stdin|file] [-run-id <id>] [-purpose <text>] [-no-open] -- <command> [args...]
 package main
 
 import (
@@ -26,6 +26,9 @@ import (
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/gwclient"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/secretrun"
 )
+
+// runIDEnv names the run id when -run-id isn't given.
+const runIDEnv = "SNEAKERS_RUN_ID"
 
 type config struct {
 	endpoint string
@@ -48,6 +51,11 @@ Flags:
                         file: write it to a 0600 temp file, named by
                         {secret_file} in the args and $SNEAKERS_SECRET_FILE
   -label <text>         shown on the approval page (default: this host's name)
+  -run-id <id>          put this use on the same approval page as the other
+                        uses of run <id> (default: $SNEAKERS_RUN_ID, else a
+                        new run for this command)
+  -purpose <text>       one line saying what the command is for, shown to the
+                        owner on the approval page
   -no-open              print the approval link without opening a browser
   -insecure-localhost   allow an http:// SNEAKERS_URL on localhost (testing only)
   -h, -help             print this help
@@ -58,17 +66,20 @@ Environment:
   SNEAKERS_URL     Sneakers base URL; must be https://
   SNEAKERS_TOKEN   your personal token from /login (snk_u_...); not passed
                    to the command
+  SNEAKERS_RUN_ID  run id used when -run-id isn't given ([A-Za-z0-9_-],
+                   at most 64 characters)
   BROWSER          browser used to open the approval page (else xdg-open
                    or open)
 
 Examples:
   sneakers-run -secret <secret id> -- ssh admin@router-01
   sneakers-run -inject file -secret <secret id> -- tool --key {secret_file}
+  SNEAKERS_RUN_ID=run_deploy1 sneakers-run -purpose "deploy the app" -secret <secret id> -- tool
 `
 
 type flags struct {
-	secret, field, inject, label *string
-	insecureLocal, noOpen        *bool
+	secret, field, inject, label, runID, purpose *string
+	insecureLocal, noOpen                        *bool
 }
 
 func newFlags() (*flag.FlagSet, flags) {
@@ -79,6 +90,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		field:         fs.String("field", "password", "field key"),
 		inject:        fs.String("inject", string(secretrun.InjectStdin), "stdin or file"),
 		label:         fs.String("label", "", "shown on the approval page (default: host name)"),
+		runID:         fs.String("run-id", "", "run id shared with the other uses on one approval page"),
+		purpose:       fs.String("purpose", "", "shown to the owner on the approval page"),
 		insecureLocal: fs.Bool("insecure-localhost", false, "allow http:// to localhost (testing only)"),
 		noOpen:        fs.Bool("no-open", false, "print the approval link without opening a browser"),
 	}
@@ -106,11 +119,18 @@ func parse(args []string, getenv func(string) string) (config, error) {
 	if *label == "" {
 		*label, _ = os.Hostname()
 	}
+	runID := *f.runID
+	if runID == "" {
+		runID = getenv(runIDEnv)
+	}
+	if runID != "" && !gwclient.ValidRunID(runID) {
+		return config{}, fmt.Errorf("-run-id or %s must be 1 to 64 letters, digits, '_' or '-'", runIDEnv)
+	}
 	return config{
 		endpoint: endpoint,
 		noOpen:   *noOpen,
 		opts: secretrun.Options{
-			Token: token, SecretID: *secret, FieldKey: *field, Label: *label,
+			Token: token, SecretID: *secret, FieldKey: *field, Label: *label, RunID: runID, Purpose: *f.purpose,
 			Argv: fs.Args(), Inject: mode, PollInterval: 2 * time.Second,
 		},
 	}, nil

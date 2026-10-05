@@ -445,35 +445,41 @@ type SecretUse struct {
 	State         string   `json:"state"`
 	ExpiresAtUnix int64    `json:"expiresAtUnix"`
 	ApprovalURL   string   `json:"approvalUrl"`
+	Reveal        bool     `json:"reveal"`
+	RunID         string   `json:"runId"`
 }
 
-const secretUseFields = `id secretId secretName fieldKey argv state expiresAtUnix approvalUrl` // #nosec G101 -- a GraphQL field selection, not a credential
+const secretUseFields = `id secretId secretName fieldKey argv state expiresAtUnix approvalUrl reveal runId` // #nosec G101 -- a GraphQL field selection, not a credential
 
-const prepareUseMutation = `mutation Prepare($secretId:ID!,$fieldKey:String!,$argv:[String!]!,$clientLabel:String){
-  prepareSecretUse(secretId:$secretId,fieldKey:$fieldKey,argv:$argv,clientLabel:$clientLabel){` + secretUseFields + `}
+const prepareUseMutation = `mutation Prepare($secretId:ID!,$fieldKey:String!,$argv:[String!]!,$clientLabel:String,$runId:String,$purpose:String){
+  prepareSecretUse(secretId:$secretId,fieldKey:$fieldKey,argv:$argv,clientLabel:$clientLabel,runId:$runId,purpose:$purpose){` + secretUseFields + `}
 }`
 
-// PrepareSecretUse asks for a use of fieldKey bound to exactly argv.
-func (c *Client) PrepareSecretUse(ctx context.Context, token, secretID, fieldKey string, argv []string, clientLabel string) (SecretUse, error) {
+// PrepareSecretUse asks for a use of fieldKey bound to exactly argv. At most
+// one Run is used; its purpose is cleaned with CleanPurpose.
+func (c *Client) PrepareSecretUse(ctx context.Context, token, secretID, fieldKey string, argv []string, clientLabel string, run ...Run) (SecretUse, error) {
 	var out struct {
 		Use SecretUse `json:"prepareSecretUse"`
 	}
 	vars := map[string]any{"secretId": secretID, "fieldKey": fieldKey, "argv": argv, "clientLabel": nilIfEmpty(clientLabel)}
+	runVars(vars, run)
 	err := c.do(ctx, token, prepareUseMutation, vars, &out)
 	return out.Use, err
 }
 
-const prepareRevealMutation = `mutation PrepareReveal($secretId:ID!,$fieldKey:String!,$clientLabel:String,$reveal:Boolean){
-  prepareSecretUse(secretId:$secretId,fieldKey:$fieldKey,clientLabel:$clientLabel,reveal:$reveal){` + secretUseFields + `}
+const prepareRevealMutation = `mutation PrepareReveal($secretId:ID!,$fieldKey:String!,$clientLabel:String,$reveal:Boolean,$runId:String,$purpose:String){
+  prepareSecretUse(secretId:$secretId,fieldKey:$fieldKey,clientLabel:$clientLabel,reveal:$reveal,runId:$runId,purpose:$purpose){` + secretUseFields + `}
 }`
 
 // PrepareReveal asks for the value of fieldKey itself, for a secret whose owner
-// must approve each personal-token reveal. It names no command.
-func (c *Client) PrepareReveal(ctx context.Context, token, secretID, fieldKey, clientLabel string) (SecretUse, error) {
+// must approve each personal-token reveal. It names no command. At most one
+// Run is used, as for PrepareSecretUse.
+func (c *Client) PrepareReveal(ctx context.Context, token, secretID, fieldKey, clientLabel string, run ...Run) (SecretUse, error) {
 	var out struct {
 		Use SecretUse `json:"prepareSecretUse"`
 	}
 	vars := map[string]any{"secretId": secretID, "fieldKey": fieldKey, "clientLabel": nilIfEmpty(clientLabel), "reveal": true}
+	runVars(vars, run)
 	err := c.do(ctx, token, prepareRevealMutation, vars, &out)
 	return out.Use, err
 }
