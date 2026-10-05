@@ -32,6 +32,23 @@ couldn't be prepared, approved or redeemed.
 - `SNEAKERS_URL` must be `https://`. Plain `http://` is accepted only for localhost with
   `-insecure-localhost`, for testing against a local gateway.
 
+## Several commands on one approval page
+
+Every use belongs to a run, and the owner approves all the pending uses of one run on one page with
+one second factor. Without `-run-id`, each `sneakers-run` starts its own run, so a single command is
+a batch of one. To put several commands on the same page, give them the same run id with `-run-id`
+or `$SNEAKERS_RUN_ID` (the flag wins), and start them before approving:
+
+```sh
+export SNEAKERS_RUN_ID=run_deploy1
+sneakers-run -purpose "deploy the app" -secret <db id> -- tool migrate &
+sneakers-run -purpose "deploy the app" -secret <api id> -- tool publish
+```
+
+A run id is 1 to 64 letters, digits, `_` or `-`; anything else is a usage error. `-purpose` is one
+line shown to the owner as plain text; control characters and invalid UTF-8 are dropped, whitespace
+is collapsed and it is cut to 200 characters. The run id is printed with the approval link.
+
 ## Approvals open in your browser
 
 When the gateway leaves a use pending, `sneakers-run` prints the approval link to stderr and opens

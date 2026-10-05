@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ const (
 	maxFieldKeyLen   = 128
 	maxFieldValueLen = 16 << 10
 	maxFields        = 32
+	maxTaskLen       = 1 << 10
 )
 
 const (
@@ -324,21 +326,35 @@ func (t *toolset) listSecretTypes(ctx context.Context, req *mcp.CallToolRequest,
 type getSecretIn struct {
 	ID       string `json:"id" jsonschema:"secret id, as returned by sneakers_find_secrets"`
 	FieldKey string `json:"fieldKey" jsonschema:"which field to read, e.g. password, notes or url"`
+	RunID    string `json:"runId,omitempty" jsonschema:"the runId an earlier call in this same task returned; leave it out on the first request of a new task"`
+	Task     string `json:"task,omitempty" jsonschema:"one short line saying what the task is, shown to the owner on the approval page"`
+}
+
+// pendingUse is one use still waiting for the owner in a run.
+type pendingUse struct {
+	UseID         string `json:"useId"`
+	SecretName    string `json:"secretName"`
+	FieldKey      string `json:"fieldKey"`
+	Reveal        bool   `json:"reveal"`
+	ExpiresAtUnix int64  `json:"expiresAtUnix"`
 }
 type getSecretOut struct {
-	Value            string `json:"value"`
-	ApprovalRequired bool   `json:"approvalRequired,omitempty"`
-	ApprovalURL      string `json:"approvalUrl,omitempty"`
-	UseID            string `json:"useId,omitempty"`
-	ExpiresAtUnix    int64  `json:"expiresAtUnix,omitempty"`
-	Message          string `json:"message,omitempty"`
+	Value            string       `json:"value"`
+	ApprovalRequired bool         `json:"approvalRequired,omitempty"`
+	ApprovalURL      string       `json:"approvalUrl,omitempty"`
+	UseID            string       `json:"useId,omitempty"`
+	ExpiresAtUnix    int64        `json:"expiresAtUnix,omitempty"`
+	Message          string       `json:"message,omitempty"`
+	RunID            string       `json:"runId,omitempty"`
+	Pending          []pendingUse `json:"pending,omitempty"`
 }
 
 func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in getSecretIn) (*mcp.CallToolResult, getSecretOut, error) {
 	var out getSecretOut
 	err := t.run(req, toolGet,
 		func() error {
-			return checkAll(checkLen("id", in.ID, maxIDLen, true), checkLen("fieldKey", in.FieldKey, maxFieldKeyLen, true))
+			return checkAll(checkLen("id", in.ID, maxIDLen, true), checkLen("fieldKey", in.FieldKey, maxFieldKeyLen, true),
+				checkRunID(in.RunID), checkLen("task", in.Task, maxTaskLen, false))
 		},
 		func(token string) error {
 			v, err := t.gw.RevealField(ctx, token, in.ID, in.FieldKey)
@@ -346,7 +362,11 @@ func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in ge
 				out.Value = v
 				return err
 			}
-			use, err := t.gw.PrepareReveal(ctx, token, in.ID, in.FieldKey, revealClientLabel)
+			run := gwclient.Run{ID: in.RunID, Purpose: in.Task}
+			if run.ID == "" {
+				run.ID = gwclient.NewRunID()
+			}
+			use, err := t.gw.PrepareReveal(ctx, token, in.ID, in.FieldKey, revealClientLabel, run)
 			if err != nil {
 				return err
 			}
@@ -354,9 +374,10 @@ func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in ge
 				out.Value, _, err = t.gw.RedeemSecretUse(ctx, token, use.ID)
 				return err
 			}
+			pending := t.runPending(ctx, token, run.ID, use)
 			out = getSecretOut{
 				ApprovalRequired: true, ApprovalURL: use.ApprovalURL, UseID: use.ID, ExpiresAtUnix: use.ExpiresAtUnix,
-				Message: "The owner must approve this reveal. " + openApprovalNow(use.ApprovalURL),
+				RunID: run.ID, Pending: pending, Message: runApprovalMessage(run.ID, use.ApprovalURL, len(pending)),
 			}
 			return nil
 		})
@@ -364,6 +385,44 @@ func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in ge
 		return nil, getSecretOut{}, err
 	}
 	return nil, out, nil
+}
+
+// checkRunID accepts an empty run id (the bridge mints one) or the shape
+// vault accepts.
+func checkRunID(id string) error {
+	if id != "" && !gwclient.ValidRunID(id) {
+		return errors.New("runId must be 1 to 64 letters, digits, '_' or '-', as returned by " + toolGet)
+	}
+	return nil
+}
+
+// runPending lists what is still waiting in the run. If the gateway can't list
+// it, the use just prepared is still the one the link shows.
+func (t *toolset) runPending(ctx context.Context, token, runID string, use gwclient.SecretUse) []pendingUse {
+	uses, err := t.gw.SecretUseRun(ctx, token, runID)
+	if err != nil {
+		t.log.Warn().Str("tool", toolGet).Str("run", runID).Str("outcome", outcome(err)).
+			Msg("could not list the run's pending uses; reporting only this one")
+		uses = nil
+	}
+	if !slices.ContainsFunc(uses, func(u gwclient.SecretUse) bool { return u.ID == use.ID }) {
+		uses = append(uses, use)
+	}
+	out := make([]pendingUse, 0, len(uses))
+	for _, u := range uses {
+		out = append(out, pendingUse{UseID: u.ID, SecretName: u.SecretName, FieldKey: u.FieldKey, Reveal: u.Reveal, ExpiresAtUnix: u.ExpiresAtUnix})
+	}
+	return out
+}
+
+// runApprovalMessage tells the agent to raise the rest of the task's uses in
+// the same run first, then open the one link.
+func runApprovalMessage(runID, url string, n int) string {
+	return fmt.Sprintf("The owner must approve this reveal; %d request(s) are waiting in run %s. Ask for any other "+
+		"secrets this task needs first, passing runId %q, so they join the same approval page. Then open approvalUrl "+
+		"in the user's browser now (%s) with this environment's browser opener ($BROWSER, xdg-open or open), so the "+
+		"owner sees it before it expires. After they approve with their second factor, call %s with "+
+		"each useId within 60 seconds.", n, runID, runID, url, toolRedeem)
 }
 
 // openApprovalNow asks the agent to open the page on the user's machine: this
@@ -678,9 +737,12 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 			"back directly and are audited as a read. A sensitive field (password, key, token) is a reveal, audited as " +
 			"one. Both are audited as the token's user, or the service account, and fail if the caller lacks read " +
 			"access. Some secrets need the token owner's approval in the browser for each reveal of a sensitive field " +
-			"by a personal token: then no value comes back, only approvalRequired, an approvalUrl and a useId. Then " +
-			"open approvalUrl in the user's browser straight away with the environment's browser opener, and after the " +
-			"owner approves, call " + toolRedeem + " with the useId. Token approval covers personal tokens only: a " +
+			"by a personal token: then no value comes back, only approvalRequired, an approvalUrl, a useId, a runId and " +
+			"pending (every request still waiting in the run). All the requests of one task share one approval page: " +
+			"pass the returned runId on every later request in the same task, and pass task (one short line saying " +
+			"what you're doing, shown to the owner) on each. Ask for every secret the task needs first, then open " +
+			"approvalUrl in the user's browser, once, with the environment's browser opener; after the owner approves, " +
+			"call " + toolRedeem + " with each useId. Start a new task without a runId. Token approval covers personal tokens only: a " +
 			"service-account token's reveal is never held for approval, and is governed by the account's access rules " +
 			"and the \"Allow API access to sensitive secrets\" setting.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
@@ -689,7 +751,7 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: toolRedeem,
 		Description: "Collect a personal token's reveal the owner has approved, using the useId from " +
-			"sneakers_get_secret. Returns " +
+			"sneakers_get_secret, once for each useId of the run. Returns " +
 			"pending (with the approvalUrl) until they approve: if it wasn't opened yet, open approvalUrl in the user's " +
 			"browser with the environment's browser opener, then call again after they approve. The value is released " +
 			"once, within 60 seconds of approval.",

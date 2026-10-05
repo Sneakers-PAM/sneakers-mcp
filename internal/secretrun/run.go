@@ -41,17 +41,20 @@ var ErrArgvMismatch = errors.New("approved command differs from the requested co
 
 // Gateway is the slice of gwclient.Client the runner needs.
 type Gateway interface {
-	PrepareSecretUse(ctx context.Context, token, secretID, fieldKey string, argv []string, clientLabel string) (gwclient.SecretUse, error)
+	PrepareSecretUse(ctx context.Context, token, secretID, fieldKey string, argv []string, clientLabel string, run ...gwclient.Run) (gwclient.SecretUse, error)
 	SecretUse(ctx context.Context, token, id string) (gwclient.SecretUse, error)
 	RedeemSecretUse(ctx context.Context, token, id string) (string, gwclient.SecretUse, error)
 }
 
 type Options struct {
 	Token, SecretID, FieldKey, Label string
-	Argv                             []string
-	Inject                           Inject
-	PollInterval                     time.Duration
-	Stdout, Stderr                   io.Writer
+	// RunID groups this use with others on one approval page; empty mints a
+	// new run for this invocation. Purpose is shown to the owner.
+	RunID, Purpose string
+	Argv           []string
+	Inject         Inject
+	PollInterval   time.Duration
+	Stdout, Stderr io.Writer
 	// Open shows the approval page to the user; nil leaves it to the printed link.
 	Open func(url string)
 }
@@ -66,12 +69,16 @@ func Run(ctx context.Context, gw Gateway, o Options) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	use, err := gw.PrepareSecretUse(ctx, o.Token, o.SecretID, o.FieldKey, o.Argv, o.Label)
+	run := gwclient.Run{ID: o.RunID, Purpose: o.Purpose}
+	if run.ID == "" {
+		run.ID = gwclient.NewRunID()
+	}
+	use, err := gw.PrepareSecretUse(ctx, o.Token, o.SecretID, o.FieldKey, o.Argv, o.Label, run)
 	if err != nil {
 		return 0, fmt.Errorf("prepare: %w", err)
 	}
 	if use.State == "PENDING" {
-		_, _ = fmt.Fprintf(o.Stderr, "sneakers-run: approve this use of %s at %s\n", use.SecretName, use.ApprovalURL)
+		_, _ = fmt.Fprintf(o.Stderr, "sneakers-run: approve this use of %s at %s (run %s)\n", use.SecretName, use.ApprovalURL, run.ID)
 		if o.Open != nil {
 			o.Open(use.ApprovalURL)
 		}

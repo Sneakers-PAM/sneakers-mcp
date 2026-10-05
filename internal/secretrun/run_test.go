@@ -23,15 +23,19 @@ type fakeGateway struct {
 	polls        int
 	redeemed     bool
 	prepareLabel string
+	prepareRun   gwclient.Run
 }
 
 func (f *fakeGateway) use(state string) gwclient.SecretUse {
 	return gwclient.SecretUse{ID: "use-1", State: state, Argv: f.boundArgv, ApprovalURL: "https://sneakers.example.org/approvals"}
 }
 
-func (f *fakeGateway) PrepareSecretUse(_ context.Context, token, secretID, fieldKey string, argv []string, label string) (gwclient.SecretUse, error) {
+func (f *fakeGateway) PrepareSecretUse(_ context.Context, token, secretID, fieldKey string, argv []string, label string, run ...gwclient.Run) (gwclient.SecretUse, error) {
 	f.prepared = append([]string{token, secretID, fieldKey}, argv...)
 	f.prepareLabel = label
+	if len(run) > 0 {
+		f.prepareRun = run[0]
+	}
 	if f.boundArgv == nil {
 		f.boundArgv = argv
 	}
