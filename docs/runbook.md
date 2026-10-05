@@ -35,9 +35,17 @@ audience, the resource URL and the gateway URL. A stop is a fatal log line and a
 
 ## Health
 
-`GET /health` answers `{"status":"ok"}` whenever the process is serving. It doesn't call the
-gateway, so use it for liveness and readiness; a gateway outage shows up as `401` on `/mcp` (token
-callers) and as tool errors.
+`GET /health` answers `{"status":"ok","version":"<tag>","commit":"<sha>"}` whenever the process
+is serving. It doesn't call the gateway, so use it for liveness and readiness; a gateway outage
+shows up as `401` on `/mcp` (token callers) and as tool errors.
+
+`version` and `commit` are the binary's build, stamped by the image build from its `VERSION` and
+`COMMIT` build arguments (`dev`, and Go's VCS revision or `unknown`, when unstamped).
+`SERVICE_VERSION` changes only the version in MCP `serverInfo`, never this answer.
+
+```bash
+docker build --build-arg VERSION=v0.1.0 --build-arg COMMIT="$(git rev-parse HEAD)" .
+```
 
 ## Logs
 

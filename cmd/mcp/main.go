@@ -11,12 +11,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -43,8 +45,28 @@ const (
 	metadataPath        = "/.well-known/oauth-protected-resource"
 )
 
-// version is stamped at image build with -ldflags "-X main.version=<tag>".
-var version = "dev"
+// version and commit are stamped at image build with
+// -ldflags "-X main.version=<tag> -X main.commit=<sha>".
+var (
+	version = "dev"
+	commit  = ""
+)
+
+// buildCommit is the stamped commit, else the VCS revision Go records when it
+// builds from a git checkout, else "unknown".
+func buildCommit() string {
+	if commit != "" {
+		return commit
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" && s.Value != "" {
+				return s.Value
+			}
+		}
+	}
+	return "unknown"
+}
 
 // env returns the environment value for k, or def when unset/empty.
 func env(k, def string) string {
@@ -215,7 +237,7 @@ func newMux(streamable http.Handler, authMW func(http.Handler) http.Handler, met
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "version": version, "commit": buildCommit()})
 	})
 	if metadata != nil {
 		md := auth.ProtectedResourceMetadataHandler(metadata)
