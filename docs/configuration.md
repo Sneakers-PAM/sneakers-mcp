@@ -7,7 +7,7 @@ with a fatal log line and a non-zero exit.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `HTTP_PORT` | `9101` | HTTP listen port for `/mcp`, `/health` and the metadata routes. |
+| `HTTP_PORT` | `9101` | HTTP listen port for `/mcp`, `/health`, `/livez`, `/readyz` and the metadata routes. |
 | `GATEWAY_MACHINE_GRAPHQL_URL` | `http://sneakers-gateway:9100/machine/graphql` | The gateway's machine GraphQL endpoint, used for every tool call and for the token pre-check. |
 | `MCP_ACCEPT_API_TOKENS` | `true` | Accept service-account API tokens and personal tokens, which the gateway confirms. Must parse as a boolean. |
 | `HYDRA_ISSUER` | (empty: Ory Hydra mode off) | The exact `iss` string of the Ory Hydra tokens, for example `https://hydra.example.org/` (the trailing slash matters). Setting it turns the JWT mode on. |
