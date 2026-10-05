@@ -4,16 +4,26 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Sneakers-PAM/sneakers-mcp/internal/health"
+	buildinfo "github.com/Bugs5382/go-buildinfo"
+	"github.com/Bugs5382/go-buildinfo/health"
+	log "github.com/Bugs5382/go-log"
 	"github.com/rs/zerolog"
 )
+
+// testTTL is the cache window the tests run with; waiting it out lets the next
+// probe run the checks again.
+const testTTL = time.Second
 
 type fakeDeps struct {
 	gateway, jwks atomic.Int32
@@ -43,31 +53,53 @@ func newFakeDeps(t *testing.T) *fakeDeps {
 	return f
 }
 
-func probe(t *testing.T, h http.Handler, path string) (int, health.Report) {
+// readyBody is the /readyz answer.
+type readyBody struct {
+	Status       health.State              `json:"status"`
+	Ready        bool                      `json:"ready"`
+	Build        buildinfo.Info            `json:"build"`
+	Dependencies []health.DependencyReport `json:"dependencies"`
+}
+
+func probe(t *testing.T, h http.Handler, path string) (int, readyBody) {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-	var r health.Report
+	var r readyBody
 	_ = json.Unmarshal(rec.Body.Bytes(), &r)
 	return rec.Code, r
 }
 
-func depByName(r health.Report, name string) health.DepState {
+func depByName(r readyBody, name string) health.DependencyReport {
 	for _, d := range r.Dependencies {
 		if d.Name == name {
 			return d
 		}
 	}
-	return health.DepState{}
+	return health.DependencyReport{}
+}
+
+func testChecker(t *testing.T, cfg config) *health.Checker {
+	t.Helper()
+	c, err := newHealthChecker(cfg, log.Nop(), health.WithTTL(testTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func healthMux(t *testing.T, c *health.Checker) *http.ServeMux {
+	t.Helper()
+	mux := http.NewServeMux()
+	if err := mountHealth(mux, c); err != nil {
+		t.Fatal(err)
+	}
+	return mux
 }
 
 func TestHealth_GatewayIsRequiredAndCheckedWithoutAToken(t *testing.T) {
 	f := newFakeDeps(t)
-	now := time.Unix(1_800_000_000, 0)
-	c := newHealthChecker(config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true}, zerolog.Nop())
-	c.Now = func() time.Time { return now }
-	mux := http.NewServeMux()
-	mountHealth(mux, c)
+	mux := healthMux(t, testChecker(t, config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true}))
 
 	code, r := probe(t, mux, "/readyz")
 	if code != http.StatusOK || depByName(r, "gateway").State != health.StateOK || !depByName(r, "gateway").Required {
@@ -81,7 +113,7 @@ func TestHealth_GatewayIsRequiredAndCheckedWithoutAToken(t *testing.T) {
 	}
 
 	f.gateway.Store(http.StatusServiceUnavailable)
-	now = now.Add(health.CacheTTL)
+	time.Sleep(testTTL)
 	if code, r := probe(t, mux, "/readyz"); code != http.StatusServiceUnavailable || depByName(r, "gateway").State != health.StateDown {
 		t.Fatalf("gateway not ready: %d %+v", code, r)
 	}
@@ -90,52 +122,188 @@ func TestHealth_GatewayIsRequiredAndCheckedWithoutAToken(t *testing.T) {
 	}
 
 	f.gateway.Store(http.StatusOK)
-	now = now.Add(health.CacheTTL)
+	time.Sleep(testTTL)
 	if code, _ := probe(t, mux, "/readyz"); code != http.StatusOK {
 		t.Fatalf("recovered: %d", code)
 	}
 
 	f.srv.Close()
-	now = now.Add(health.CacheTTL)
-	if code, r := probe(t, mux, "/readyz"); code != http.StatusServiceUnavailable || depByName(r, "gateway").Error != health.ClassRefused {
+	time.Sleep(testTTL)
+	if code, r := probe(t, mux, "/readyz"); code != http.StatusServiceUnavailable || depByName(r, "gateway").Error != "refused" {
 		t.Fatalf("gateway stopped: %d %+v", code, r)
 	}
 }
 
 func TestHealth_HydraJWKSRequiredOnlyWhenItIsTheOnlyBearerMode(t *testing.T) {
 	f := newFakeDeps(t)
-	now := time.Unix(1_800_000_000, 0)
 	jwks := f.srv.URL + "/.well-known/jwks.json"
 	f.jwks.Store(http.StatusBadGateway)
 
-	both := newHealthChecker(config{GatewayURL: f.srv.URL + "/machine/graphql", HydraIssuer: "https://hydra.example.test/", HydraJWKSURL: jwks, AcceptAPITokens: true}, zerolog.Nop())
-	both.Now = func() time.Time { return now }
-	if r := both.Report(t.Context()); r.Status != health.StateDegraded || depByName(r, "hydra-jwks").State != health.StateDegraded {
+	both := testChecker(t, config{GatewayURL: f.srv.URL + "/machine/graphql", HydraIssuer: "https://hydra.example.test/", HydraJWKSURL: jwks, AcceptAPITokens: true})
+	if r := both.Report(t.Context()); r.Status != health.StateDegraded || r.Dependencies[1].Name != "hydra-jwks" || r.Dependencies[1].State != health.StateDegraded {
 		t.Fatalf("with API tokens on, a JWKS outage only degrades: %+v", r)
 	}
 
-	only := newHealthChecker(config{GatewayURL: f.srv.URL + "/machine/graphql", HydraIssuer: "https://hydra.example.test/", HydraJWKSURL: jwks}, zerolog.Nop())
-	only.Now = func() time.Time { return now }
-	if r := only.Report(t.Context()); r.Status != health.StateDown || !depByName(r, "hydra-jwks").Required {
+	only := testChecker(t, config{GatewayURL: f.srv.URL + "/machine/graphql", HydraIssuer: "https://hydra.example.test/", HydraJWKSURL: jwks})
+	if r := only.Report(t.Context()); r.Status != health.StateDown || r.Dependencies[1].Name != "hydra-jwks" || !r.Dependencies[1].Required {
 		t.Fatalf("Hydra-only, a JWKS outage is down: %+v", r)
 	}
 }
 
-func TestHealth_RoutesAreOutsideAuthAndHealthIsUnchanged(t *testing.T) {
+func TestHealth_RoutesAreOutsideAuthAndHealthIsGone(t *testing.T) {
 	f := newFakeDeps(t)
 	h, err := buildHandler(config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true}, zerolog.Nop())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"/livez", "/readyz", "/health"} {
+	for _, p := range []string{"/livez", "/readyz"} {
 		if code, _ := probe(t, h, p); code != http.StatusOK {
 			t.Fatalf("%s = %d, want 200 without a bearer", p, code)
 		}
 	}
+	if code, _ := probe(t, h, "/health"); code != http.StatusNotFound {
+		t.Fatalf("/health = %d, want 404", code)
+	}
+}
+
+// The checks below cover the readiness rules the server relies on, through
+// its own checker and routes.
+
+func TestHealth_RequiredDependencyDownFailsReadinessNotLiveness(t *testing.T) {
+	var down atomic.Bool
+	calls := atomic.Int32{}
+	c := health.New(health.WithTTL(testTTL))
+	if err := c.Register(health.Dependency{Name: "gateway", Required: true, Check: func(context.Context) error {
+		calls.Add(1)
+		if down.Load() {
+			return errors.New("dial tcp gw.example.test:9100: secret-text-SHOULD-NOT-LEAK")
+		}
+		return nil
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	mux := healthMux(t, c)
+
+	if code, r := probe(t, mux, "/readyz"); code != http.StatusOK || r.Status != health.StateOK {
+		t.Fatalf("up: %d %+v", code, r)
+	}
+	down.Store(true)
+	if code, _ := probe(t, mux, "/readyz"); code != http.StatusOK {
+		t.Fatalf("inside the cache window the old answer stands, got %d", code)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("checks = %d, want 1 (cached)", calls.Load())
+	}
+	time.Sleep(testTTL)
+	wantDownWithoutErrorText(t, mux)
+	if code, _ := probe(t, mux, "/livez"); code != http.StatusOK {
+		t.Fatal("liveness must not follow a dependency")
+	}
+	down.Store(false)
+	time.Sleep(testTTL)
+	if code, r := probe(t, mux, "/readyz"); code != http.StatusOK || r.Status != health.StateOK {
+		t.Fatalf("recovered: %d %+v", code, r)
+	}
+}
+
+// wantDownWithoutErrorText checks /readyz is 503 with the gateway down, its
+// error reduced to a class.
+func wantDownWithoutErrorText(t *testing.T, mux http.Handler) {
+	t.Helper()
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-	var body map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["status"] != "ok" || body["version"] == "" || body["commit"] == "" {
-		t.Fatalf("/health = %s", rec.Body.String())
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	var r readyBody
+	_ = json.Unmarshal(rec.Body.Bytes(), &r)
+	if rec.Code != http.StatusServiceUnavailable || r.Status != health.StateDown || r.Dependencies[0].State != health.StateDown || r.Dependencies[0].Error != "error" {
+		t.Fatalf("down: %d %+v", rec.Code, r)
+	}
+	if body := rec.Body.String(); strings.Contains(body, "SHOULD-NOT-LEAK") || strings.Contains(body, "example.test") {
+		t.Fatalf("error text reached the body: %s", body)
+	}
+}
+
+func TestHealth_OptionalDependencyDegrades(t *testing.T) {
+	c := health.New()
+	if err := c.Register(
+		health.Dependency{Name: "gateway", Required: true, Check: func(context.Context) error { return nil }},
+		health.Dependency{Name: "hydra-jwks", Check: func(context.Context) error { return &statusError{code: 500} }},
+	); err != nil {
+		t.Fatal(err)
+	}
+	code, r := probe(t, healthMux(t, c), "/readyz")
+	if code != http.StatusOK || r.Status != health.StateDegraded || r.Dependencies[1].State != health.StateDegraded {
+		t.Fatalf("got %d %+v", code, r)
+	}
+}
+
+func TestHealth_CheckTimesOut(t *testing.T) {
+	c := health.New(health.WithTimeout(20 * time.Millisecond))
+	if err := c.Register(health.Dependency{Name: "gateway", Required: true, Check: func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := c.Report(t.Context()); r.Dependencies[0].Error != "timeout" {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestHealth_HTTPCheckAgainstAStoppedServer(t *testing.T) {
+	var status atomic.Int32
+	status.Store(http.StatusOK)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(int(status.Load())) }))
+	check := checkHTTP(srv.Client(), srv.URL+"/readyz")
+	class := func() string {
+		c := health.New()
+		if err := c.Register(health.Dependency{Name: "gateway", Check: check}); err != nil {
+			t.Fatal(err)
+		}
+		return c.Report(t.Context()).Dependencies[0].Error
+	}
+	if err := check(context.Background()); err != nil {
+		t.Fatalf("up: %v", err)
+	}
+	status.Store(http.StatusUnauthorized)
+	if got := class(); got != "unauthenticated" {
+		t.Fatalf("401 class = %q", got)
+	}
+	status.Store(http.StatusInternalServerError)
+	if got := class(); got != "error" {
+		t.Fatalf("500 class = %q", got)
+	}
+	srv.Close()
+	if got := class(); got != "refused" {
+		t.Fatalf("stopped server class = %q, want refused", got)
+	}
+}
+
+// TestHealth_HeaderNames pins the exact header names /readyz and /livez
+// carry; the gateway's diagnostics read the build from them.
+func TestHealth_HeaderNames(t *testing.T) {
+	stampBuild(t)
+	f := newFakeDeps(t)
+	mux := healthMux(t, testChecker(t, config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true}))
+	keys := func(path string) (http.Header, []string) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		var out []string
+		for k := range rec.Header() {
+			if strings.HasPrefix(k, "Sneakers-") {
+				out = append(out, k)
+			}
+		}
+		slices.Sort(out)
+		return rec.Header(), out
+	}
+	h, got := keys("/readyz")
+	if want := []string{"Sneakers-Commit", "Sneakers-Depstate-Gateway", "Sneakers-Version"}; !slices.Equal(got, want) {
+		t.Fatalf("/readyz headers = %v, want %v", got, want)
+	}
+	if h.Get("Sneakers-Version") != "v9.9.9-test" || h.Get("Sneakers-Commit") != "0123456789abcdef" {
+		t.Fatalf("/readyz build headers = %v", h)
+	}
+	if _, got := keys("/livez"); !slices.Equal(got, []string{"Sneakers-Commit", "Sneakers-Version"}) {
+		t.Fatalf("/livez headers = %v", got)
 	}
 }

@@ -5,9 +5,8 @@
 | Route | Auth | What it does |
 |---|---|---|
 | `POST /mcp` | bearer | MCP over Streamable HTTP, stateless mode. Requests are capped at 1 MiB and must pass Go's cross-origin protection. |
-| `GET /health` | none | `{"status":"ok","version":"<tag>","commit":"<sha>"}`, for the gateway's diagnostics. Not logged. |
-| `GET /livez` | none | Liveness: `{"status":"ok"}` whenever the process answers. It checks no dependency. Not logged. |
-| `GET /readyz` | none | Readiness: `200` while every required dependency is up (`ok` or `degraded`), `503` while one is down. The body lists each dependency's `name`, `state` (`ok`, `degraded`, `down`), `required`, `error` (one of `timeout`, `refused`, `unavailable`, `unauthenticated`, `error`; never the error text), `checkedAt` and `version` when known. Checks are cached for 5 seconds, each with a 1-second timeout. Not logged. |
+| `GET /livez` | none | Liveness: `{"status":"ok"}` whenever the process answers. It checks no dependency. Its `Sneakers-Version` and `Sneakers-Commit` headers are the build, which the gateway's diagnostics read. Not logged. |
+| `GET /readyz` | none | Readiness: `200` while every required dependency is up (`ok` or `degraded`), `503` while one is down. The body is go-buildinfo's report: `status`, `ready`, `build` (`version`, `commit`, `goVersion`, `modified`) and each dependency's `name`, `state` (`ok`, `degraded`, `down`), `required`, `error` (a class such as `timeout`, `refused`, `unavailable`, `unauthenticated` or `error`; never the error text) and `checkedAt`. The headers carry the build and `Sneakers-Depstate-<name>`. Checks are cached for 5 seconds, each with a 1-second timeout. Not logged. |
 | `GET /.well-known/oauth-protected-resource` and `.../oauth-protected-resource/mcp` | none | RFC 9728 protected-resource metadata. Served only when `MCP_RESOURCE_URL` is set. |
 
 A missing or rejected bearer on `/mcp` gets `401` with a `WWW-Authenticate` header that points at

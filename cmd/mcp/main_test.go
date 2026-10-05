@@ -273,9 +273,9 @@ func rawPost(t *testing.T, url, authz string) *http.Response {
 	return resp
 }
 
-func TestHealthIsUnauthenticated(t *testing.T) {
+func TestLivezIsUnauthenticated(t *testing.T) {
 	h := newHarness(t)
-	resp, err := http.Get(h.srv.URL + "/health")
+	resp, err := http.Get(h.srv.URL + "/livez")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestHealthIsUnauthenticated(t *testing.T) {
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if resp.StatusCode != http.StatusOK || body.Status != "ok" {
-		t.Fatalf("GET /health = %d %q", resp.StatusCode, body.Status)
+		t.Fatalf("GET /livez = %d %q", resp.StatusCode, body.Status)
 	}
 }
 
