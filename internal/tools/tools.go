@@ -375,8 +375,8 @@ func openApprovalNow(url string) string {
 		"second factor, call " + toolRedeem + " again with useId within 60 seconds."
 }
 
-// needsApproval reports vault's refusal of a direct token reveal of a secret
-// whose owner approves each one.
+// needsApproval reports vault's refusal of a direct personal-token reveal of a
+// secret whose owner approves each one.
 func needsApproval(err error) bool {
 	var ge *gwclient.GraphQLError
 	return errors.As(err, &ge) && strings.Contains(ge.Error(), "approval_required")
@@ -677,16 +677,19 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 		Description: "Read one field of one secret. Non-sensitive fields (notes, URL, endpoint, description) come " +
 			"back directly and are audited as a read. A sensitive field (password, key, token) is a reveal, audited as " +
 			"one. Both are audited as the token's user, or the service account, and fail if the caller lacks read " +
-			"access. Some secrets need the owner's approval in the browser for each reveal of a sensitive field: then " +
-			"no value comes back, only approvalRequired, an approvalUrl and a useId. Then open approvalUrl in the " +
-			"user's browser straight away with the environment's browser opener, and after the owner approves, call " +
-			toolRedeem + " with the useId.",
+			"access. Some secrets need the token owner's approval in the browser for each reveal of a sensitive field " +
+			"by a personal token: then no value comes back, only approvalRequired, an approvalUrl and a useId. Then " +
+			"open approvalUrl in the user's browser straight away with the environment's browser opener, and after the " +
+			"owner approves, call " + toolRedeem + " with the useId. Token approval covers personal tokens only: a " +
+			"service-account token's reveal is never held for approval, and is governed by the account's access rules " +
+			"and the \"Allow API access to sensitive secrets\" setting.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, t.getSecret)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: toolRedeem,
-		Description: "Collect a reveal the owner has approved, using the useId from sneakers_get_secret. Returns " +
+		Description: "Collect a personal token's reveal the owner has approved, using the useId from " +
+			"sneakers_get_secret. Returns " +
 			"pending (with the approvalUrl) until they approve: if it wasn't opened yet, open approvalUrl in the user's " +
 			"browser with the environment's browser opener, then call again after they approve. The value is released " +
 			"once, within 60 seconds of approval.",

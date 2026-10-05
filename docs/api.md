@@ -31,8 +31,8 @@ and as the same JSON in the text content, for clients that read only text.
 | `sneakers_find_secrets` | read | Secrets the caller may read, by name substring, folder or type. Metadata only, never values. |
 | `sneakers_list_folders` | read | Folders the caller may read, with path and `canAuthor`. |
 | `sneakers_list_secret_types` | read | The type catalog: ids and fields (kind, required, sensitive). |
-| `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the owner approves each reveal, it returns `approvalRequired`, an `approvalUrl` and a `useId` instead of a value. |
-| `sneakers_redeem_reveal` | read | Collects an approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. |
+| `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the secret needs approval for each personal-token reveal, it returns `approvalRequired`, an `approvalUrl` and a `useId` instead of a value. |
+| `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. |
 | `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. |
 | `sneakers_generate_secret` | write | A new secret with a policy-compliant generated password, returned only when `returnValue` is true. |
 | `sneakers_update_secret` | write | Sets non-sensitive fields of an existing secret. See [sneakers-update-secret.md](sneakers-update-secret.md). |
@@ -52,11 +52,16 @@ Names may not contain `/`, because folder paths are joined with it.
 
 ### Reveals that need approval
 
-For a secret whose owner approves each token reveal, `sneakers_get_secret` prepares the reveal and
+For a secret whose owner approves each personal-token reveal, `sneakers_get_secret` prepares the reveal and
 returns its `approvalUrl` and `useId`. The result tells the agent to open the page in the user's
 browser at once with its own opener (`$BROWSER`, `xdg-open` or `open`): the server can't open
 anything on the user's machine, and a link left in a transcript tends to expire unseen. After the
 owner approves with their second factor, `sneakers_redeem_reveal` collects the value once.
+
+Token approval covers personal tokens only. A service-account token's reveal is never held for
+approval: it is governed by the account's access rules and the vault's "Allow API access to
+sensitive secrets" setting (off by default, which keeps super-sensitive fields from service
+accounts and personal tokens alike).
 
 ### Checking a credential
 

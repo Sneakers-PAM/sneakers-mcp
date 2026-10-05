@@ -11,7 +11,7 @@ and the vault applies RACI and writes the audit trail.
 ## ✨ Highlights
 
 - 🔐 **Fail-closed bearer gate:** Ory Hydra client-credentials JWTs are checked locally against the JWKS; service-account and personal tokens are confirmed by the gateway. Anything else is a bare `401`.
-- 🧰 **Tools for agents:** find, read and reveal secrets (with owner approval when the secret asks for it), create, generate, move, rename and retype them, organise folders, manage targets and turn rotation and heartbeat on or off.
+- 🧰 **Tools for agents:** find, read and reveal secrets (with owner approval for personal tokens when the secret asks for it), create, generate, move, rename and retype them, organise folders, manage targets and turn rotation and heartbeat on or off.
 - 🙈 **Values stay out of transcripts:** tool descriptions send agents to `sneakers-put` for any value that already exists on disk, and refuse sensitive fields in updates.
 - 🏃 **sneakers-run:** runs one command with a secret supplied on stdin or in a private temp file, released only for the exact command its owner approved, and masked in the output.
 - 📥 **sneakers-put:** creates or updates a secret from files or stdin, so a value never passes through an agent session or the shell history.

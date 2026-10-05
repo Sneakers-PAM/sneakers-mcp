@@ -468,7 +468,7 @@ const prepareRevealMutation = `mutation PrepareReveal($secretId:ID!,$fieldKey:St
 }`
 
 // PrepareReveal asks for the value of fieldKey itself, for a secret whose owner
-// must approve each token reveal. It names no command.
+// must approve each personal-token reveal. It names no command.
 func (c *Client) PrepareReveal(ctx context.Context, token, secretID, fieldKey, clientLabel string) (SecretUse, error) {
 	var out struct {
 		Use SecretUse `json:"prepareSecretUse"`
