@@ -227,11 +227,13 @@ func buildHandler(cfg config, logger zerolog.Logger) (http.Handler, error) {
 		func(*http.Request) *mcp.Server { return mcpServer },
 		&mcp.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: maxRequestBodyBytes},
 	)
-	return withLogging(newMux(streamable, authMW, metadata), logger), nil
+	mux := newMux(streamable, authMW, metadata)
+	mountHealth(mux, newHealthChecker(cfg, logger))
+	return withLogging(mux, logger), nil
 }
 
-// newMux builds the service's routes. /health is unauthenticated (kubelet
-// probes it); /mcp is always behind the bearer middleware. The RFC 9728
+// newMux builds the service's routes. /health is unauthenticated (the
+// gateway's diagnostics read it; /livez and /readyz are added beside it); /mcp is always behind the bearer middleware. The RFC 9728
 // metadata routes exist only when metadata is non-nil.
 func newMux(streamable http.Handler, authMW func(http.Handler) http.Handler, metadata *oauthex.ProtectedResourceMetadata) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -274,7 +276,7 @@ func withLogging(next http.Handler, logger zerolog.Logger) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, code: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		if r.URL.Path == "/health" {
+		if isProbe(r.URL.Path) {
 			return
 		}
 		logger.Info().Str("method", r.Method).Str("path", r.URL.Path).
