@@ -447,9 +447,12 @@ type SecretUse struct {
 	ApprovalURL   string   `json:"approvalUrl"`
 	Reveal        bool     `json:"reveal"`
 	RunID         string   `json:"runId"`
+	// Confirm: nobody else can decide this use, so the token's person
+	// confirms the task once in the browser.
+	Confirm bool `json:"confirm"`
 }
 
-const secretUseFields = `id secretId secretName fieldKey argv state expiresAtUnix approvalUrl reveal runId` // #nosec G101 -- a GraphQL field selection, not a credential
+const secretUseFields = `id secretId secretName fieldKey argv state expiresAtUnix approvalUrl reveal runId confirm` // #nosec G101 -- a GraphQL field selection, not a credential
 
 const prepareUseMutation = `mutation Prepare($secretId:ID!,$fieldKey:String!,$argv:[String!]!,$clientLabel:String,$runId:String,$purpose:String){
   prepareSecretUse(secretId:$secretId,fieldKey:$fieldKey,argv:$argv,clientLabel:$clientLabel,runId:$runId,purpose:$purpose){` + secretUseFields + `}
@@ -471,8 +474,8 @@ const prepareRevealMutation = `mutation PrepareReveal($secretId:ID!,$fieldKey:St
   prepareSecretUse(secretId:$secretId,fieldKey:$fieldKey,clientLabel:$clientLabel,reveal:$reveal,runId:$runId,purpose:$purpose){` + secretUseFields + `}
 }`
 
-// PrepareReveal asks for the value of fieldKey itself, for a secret whose owner
-// must approve each personal-token reveal. It names no command. At most one
+// PrepareReveal asks for the value of fieldKey itself, for a secret whose
+// approval level needs a decision. It names no command. At most one
 // Run is used, as for PrepareSecretUse.
 func (c *Client) PrepareReveal(ctx context.Context, token, secretID, fieldKey, clientLabel string, run ...Run) (SecretUse, error) {
 	var out struct {

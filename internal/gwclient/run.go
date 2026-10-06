@@ -13,9 +13,9 @@ import (
 	"unicode/utf8"
 )
 
-// Run groups the uses one agent run raises, so the owner approves them on one
-// page. ID is a grouping hint, not an authority; Purpose is the agent's own
-// words for its task, shown to the owner as plain text.
+// Run groups the uses one agent run raises, so they're decided or confirmed on
+// one page. ID is a grouping hint, not an authority; Purpose is the agent's
+// own words for its task, shown on that page as plain text.
 type Run struct {
 	ID      string
 	Purpose string

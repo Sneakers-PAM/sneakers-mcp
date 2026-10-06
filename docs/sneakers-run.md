@@ -16,8 +16,10 @@ couldn't be prepared, approved or redeemed.
 ## How the value reaches the command
 
 - It needs a personal token from `/login`. Service-account tokens are refused.
-- The use is bound to this exact argv. The owner approves it on the Approvals page with a fresh
-  second factor, unless a grant they created in the UI already covers it.
+- The use is bound to this exact argv. For a secret you can read it is approved at once. For a
+  secret with an approval level (see [api.md](api.md#reveals-that-need-approval)) it waits for an
+  owner or approver of the secret, never you; when nobody else can decide, you confirm the task
+  once on the Approvals page with your second factor, and `sneakers-run` says which applies.
 - The value is released once. `sneakers-run` refuses to run anything but the bound argv.
 - The command's stdout and stderr have the value masked, including its base64, hex and URL
   encodings.
@@ -34,8 +36,8 @@ couldn't be prepared, approved or redeemed.
 
 ## Several commands on one approval page
 
-Every use belongs to a run, and the owner approves all the pending uses of one run on one page with
-one second factor. Without `-run-id`, each `sneakers-run` starts its own run, so a single command is
+Every use belongs to a run, and all the pending uses of one run are decided or confirmed on one
+page with one second factor. Without `-run-id`, each `sneakers-run` starts its own run, so a single command is
 a batch of one. To put several commands on the same page, give them the same run id with `-run-id`
 or `$SNEAKERS_RUN_ID` (the flag wins), and start them before approving:
 

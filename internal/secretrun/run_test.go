@@ -24,10 +24,11 @@ type fakeGateway struct {
 	redeemed     bool
 	prepareLabel string
 	prepareRun   gwclient.Run
+	confirm      bool
 }
 
 func (f *fakeGateway) use(state string) gwclient.SecretUse {
-	return gwclient.SecretUse{ID: "use-1", State: state, Argv: f.boundArgv, ApprovalURL: "https://sneakers.example.org/approvals"}
+	return gwclient.SecretUse{ID: "use-1", State: state, Argv: f.boundArgv, ApprovalURL: "https://sneakers.example.org/approvals", Confirm: f.confirm}
 }
 
 func (f *fakeGateway) PrepareSecretUse(_ context.Context, token, secretID, fieldKey string, argv []string, label string, run ...gwclient.Run) (gwclient.SecretUse, error) {
@@ -167,5 +168,18 @@ func TestRunWithoutAnOpenerStillPrintsTheLink(t *testing.T) {
 	o, _, errb := opts("true")
 	if _, err := Run(context.Background(), gw, o); err != nil || !strings.Contains(errb.String(), "https://sneakers.example.org/approvals") {
 		t.Fatalf("err=%v stderr=%q", err, errb.String())
+	}
+}
+
+func TestRunSaysWhoDecidesAPendingUse(t *testing.T) {
+	for confirm, want := range map[bool]string{
+		false: "waits for an owner or approver",
+		true:  "confirm it once",
+	} {
+		gw := &fakeGateway{states: []string{"PENDING", "APPROVED"}, value: "hunter2", confirm: confirm}
+		o, _, errb := opts("true")
+		if _, err := Run(context.Background(), gw, o); err != nil || !strings.Contains(errb.String(), want) {
+			t.Fatalf("confirm=%v: err=%v stderr=%q, want %q", confirm, err, errb.String(), want)
+		}
 	}
 }

@@ -78,7 +78,11 @@ func Run(ctx context.Context, gw Gateway, o Options) (int, error) {
 		return 0, fmt.Errorf("prepare: %w", err)
 	}
 	if use.State == "PENDING" {
-		_, _ = fmt.Fprintf(o.Stderr, "sneakers-run: approve this use of %s at %s (run %s)\n", use.SecretName, use.ApprovalURL, run.ID)
+		if use.Confirm {
+			_, _ = fmt.Fprintf(o.Stderr, "sneakers-run: nobody else can approve this use of %s; confirm it once at %s (run %s)\n", use.SecretName, use.ApprovalURL, run.ID)
+		} else {
+			_, _ = fmt.Fprintf(o.Stderr, "sneakers-run: this use of %s waits for an owner or approver of the secret; see %s (run %s)\n", use.SecretName, use.ApprovalURL, run.ID)
+		}
 		if o.Open != nil {
 			o.Open(use.ApprovalURL)
 		}
@@ -127,7 +131,7 @@ func execute(ctx context.Context, program string, argv []string, value string, o
 	}
 
 	stdout, stderr := newMasker(o.Stdout, value), newMasker(o.Stderr, value)
-	cmd := exec.CommandContext(ctx, program, args[1:]...) // #nosec G204 -- runs exactly the command the owner approved
+	cmd := exec.CommandContext(ctx, program, args[1:]...) // #nosec G204 -- runs exactly the command that was approved
 	cmd.Args[0] = args[0]
 	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = env, stdin, stdout, stderr
 	runErr := cmd.Run()
