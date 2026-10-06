@@ -51,16 +51,31 @@ Names may not contain `/`, because folder paths are joined with it.
 
 ### Reveals that need approval
 
-For a secret whose owner approves each personal-token reveal, `sneakers_get_secret` prepares the reveal and
-returns its `approvalUrl` and `useId`. The result tells the agent to open the page in the user's
-browser at once with its own opener (`$BROWSER`, `xdg-open` or `open`): the server can't open
-anything on the user's machine, and a link left in a transcript tends to expire unseen. After the
-owner approves with their second factor, `sneakers_redeem_reveal` collects the value once.
+After `/login`, a personal token gets no second factor and no approval for a secret its user can
+read. The one exception is a secret with an approval level, decided by the vault:
+
+| Requester | Normal | Approval-required | Always-approve |
+|---|---|---|---|
+| An owner of the secret | no approval | no approval | another owner or a designated approver decides |
+| A non-owner with read access | no approval | any one owner decides | an owner or a designated approver decides |
+| No read access | refused | refused | refused |
+
+The user never approves their own request. When nobody else can decide (a single-user install, or
+an always-approve secret whose only approver is the user), the user confirms the task once in the
+browser with their second factor instead, and the result says so with `confirmRequired`.
+Break-glass is unchanged and isn't reachable through the MCP.
+
+For such a reveal, `sneakers_get_secret` prepares it and returns its `approvalUrl` and `useId`. The
+result tells the agent to open the page in the user's browser at once with its own opener
+(`$BROWSER`, `xdg-open` or `open`): the server can't open anything on the user's machine, and a link
+left in a transcript tends to expire unseen. Once an owner or approver approves it, or the user
+confirms it, `sneakers_redeem_reveal` collects the value once.
 
 ### One approval page per run
 
-The requests one task raises share a run, so the owner approves them on one page with one second
-factor instead of one visit per secret. The server is stateless, so the agent carries the run:
+The requests one task raises share a run, so they're decided or confirmed on one page with one
+second factor instead of one visit per secret, and once the user confirms a run, its later requests
+need nothing more. The server is stateless, so the agent carries the run:
 
 - The first `sneakers_get_secret` that needs approval, called without `runId`, starts a run: the
   bridge mints an id (`run_` and 128 random bits in base32) and returns it as `runId`.

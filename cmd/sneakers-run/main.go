@@ -3,8 +3,10 @@
 
 // Command sneakers-run runs one command with a Sneakers secret supplied to
 // it on stdin or in a private temp file. The value is released by the
-// gateway only after the token's owner approves this exact command (or a
-// grant they created covers it), and it is masked in the command's output.
+// gateway for this exact command only: at once for a secret the user can
+// read, or after an owner or approver approves it (or the user confirms the
+// task once, when nobody else can) for a secret with an approval level. It is
+// masked in the command's output.
 //
 //	SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_... \
 //	  sneakers-run -secret <id> [-field password] [-inject stdin|file] [-run-id <id>] [-purpose <text>] [-no-open] -- <command> [args...]
@@ -37,9 +39,10 @@ type config struct {
 }
 
 const usageText = `sneakers-run runs one command with a Sneakers secret field supplied to it on
-stdin or in a private temp file. The gateway releases the value only after the
-token's owner approves this exact command (or a grant they created covers
-it), and the value is masked in the command's output.
+stdin or in a private temp file. The gateway releases the value for this exact
+command only: at once for a secret you can read, or, for a secret with an
+approval level, after an owner or approver approves it (or you confirm the
+task once, when nobody else can). The value is masked in the command's output.
 
 Usage:
   sneakers-run -secret <secret id> [flags] -- <command> [args...]
@@ -54,8 +57,8 @@ Flags:
   -run-id <id>          put this use on the same approval page as the other
                         uses of run <id> (default: $SNEAKERS_RUN_ID, else a
                         new run for this command)
-  -purpose <text>       one line saying what the command is for, shown to the
-                        owner on the approval page
+  -purpose <text>       one line saying what the command is for, shown on the
+                        approval page
   -no-open              print the approval link without opening a browser
   -insecure-localhost   allow an http:// SNEAKERS_URL on localhost (testing only)
   -h, -help             print this help

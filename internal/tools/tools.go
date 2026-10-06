@@ -341,6 +341,7 @@ type pendingUse struct {
 type getSecretOut struct {
 	Value            string       `json:"value"`
 	ApprovalRequired bool         `json:"approvalRequired,omitempty"`
+	ConfirmRequired  bool         `json:"confirmRequired,omitempty"`
 	ApprovalURL      string       `json:"approvalUrl,omitempty"`
 	UseID            string       `json:"useId,omitempty"`
 	ExpiresAtUnix    int64        `json:"expiresAtUnix,omitempty"`
@@ -376,8 +377,8 @@ func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in ge
 			}
 			pending := t.runPending(ctx, token, run.ID, use)
 			out = getSecretOut{
-				ApprovalRequired: true, ApprovalURL: use.ApprovalURL, UseID: use.ID, ExpiresAtUnix: use.ExpiresAtUnix,
-				RunID: run.ID, Pending: pending, Message: runApprovalMessage(run.ID, use.ApprovalURL, len(pending)),
+				ApprovalRequired: true, ConfirmRequired: use.Confirm, ApprovalURL: use.ApprovalURL, UseID: use.ID, ExpiresAtUnix: use.ExpiresAtUnix,
+				RunID: run.ID, Pending: pending, Message: runApprovalMessage(run.ID, use.ApprovalURL, len(pending), use.Confirm),
 			}
 			return nil
 		})
@@ -417,28 +418,39 @@ func (t *toolset) runPending(ctx context.Context, token, runID string, use gwcli
 
 // runApprovalMessage tells the agent to raise the rest of the task's uses in
 // the same run first, then open the one link.
-func runApprovalMessage(runID, url string, n int) string {
-	return fmt.Sprintf("The owner must approve this reveal; %d request(s) are waiting in run %s. Ask for any other "+
-		"secrets this task needs first, passing runId %q, so they join the same approval page. Then open approvalUrl "+
-		"in the user's browser now (%s) with this environment's browser opener ($BROWSER, xdg-open or open), so the "+
-		"owner sees it before it expires. After they approve with their second factor, call %s with "+
-		"each useId within 60 seconds.", n, runID, runID, url, toolRedeem)
+func runApprovalMessage(runID, url string, n int, confirm bool) string {
+	who := "This reveal needs a decision from an owner or approver of the secret, never the user who asked"
+	if confirm {
+		who = "Nobody else can approve this reveal, so the user confirms this task once with their second factor"
+	}
+	return fmt.Sprintf("%s; %d request(s) are waiting in run %s. Ask for any other secrets this task needs first, "+
+		"passing runId %q, so they join the same page and one decision. Then %s", who, n, runID, runID, openApprovalNow(url, confirm))
 }
 
 // openApprovalNow asks the agent to open the page on the user's machine: this
 // server runs in a cluster and can't, and a link left in a transcript tends to
 // expire unseen.
-func openApprovalNow(url string) string {
-	return "Open approvalUrl in the user's browser now (" + url + ") with this environment's browser opener " +
-		"($BROWSER, xdg-open or open), so the owner sees it before it expires. After they approve it with their " +
-		"second factor, call " + toolRedeem + " again with useId within 60 seconds."
+func openApprovalNow(url string, confirm bool) string {
+	after := "After an owner or approver approves it, call " + toolRedeem + " with each useId within 60 seconds."
+	if confirm {
+		after = "After the user confirms it once, call " + toolRedeem + " with each useId within 60 seconds."
+	}
+	return "open approvalUrl in the user's browser now (" + url + ") with this environment's browser opener " +
+		"($BROWSER, xdg-open or open), so it is seen before it expires. " + after
 }
 
 // needsApproval reports vault's refusal of a direct personal-token reveal of a
-// secret whose owner approves each one.
+// secret whose approval level needs a decision.
 func needsApproval(err error) bool {
 	var ge *gwclient.GraphQLError
 	return errors.As(err, &ge) && strings.Contains(ge.Error(), "approval_required")
+}
+
+func pendingMessage(use gwclient.SecretUse) string {
+	if use.Confirm {
+		return "The user hasn't confirmed this task yet: " + openApprovalNow(use.ApprovalURL, true)
+	}
+	return "No owner or approver has approved this reveal yet: " + openApprovalNow(use.ApprovalURL, false)
 }
 
 // --- sneakers_redeem_reveal ---------------------------------------------
@@ -465,7 +477,7 @@ func (t *toolset) redeemReveal(ctx context.Context, req *mcp.CallToolRequest, in
 			switch use.State {
 			case "PENDING":
 				out = redeemRevealOut{Pending: true, ApprovalURL: use.ApprovalURL,
-					Message: "The owner hasn't approved this reveal yet. " + openApprovalNow(use.ApprovalURL)}
+					Message: pendingMessage(use)}
 				return nil
 			case "APPROVED":
 				out.Value, _, err = t.gw.RedeemSecretUse(ctx, token, use.ID)
@@ -736,13 +748,16 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 		Description: "Read one field of one secret. Non-sensitive fields (notes, URL, endpoint, description) come " +
 			"back directly and are audited as a read. A sensitive field (password, key, token) is a reveal, audited as " +
 			"one. Both are audited as the token's user, or the service account, and fail if the caller lacks read " +
-			"access. Some secrets need the token owner's approval in the browser for each reveal of a sensitive field " +
-			"by a personal token: then no value comes back, only approvalRequired, an approvalUrl, a useId, a runId and " +
-			"pending (every request still waiting in the run). All the requests of one task share one approval page: " +
-			"pass the returned runId on every later request in the same task, and pass task (one short line saying " +
-			"what you're doing, shown to the owner) on each. Ask for every secret the task needs first, then open " +
-			"approvalUrl in the user's browser, once, with the environment's browser opener; after the owner approves, " +
-			"call " + toolRedeem + " with each useId. Start a new task without a runId. Token approval covers personal tokens only: a " +
+			"access. No approval or second factor is asked for a secret the user can read, unless the secret has an " +
+			"approval level: approval-required (the secret's owners are exempt; anyone else needs one owner's approval) " +
+			"or always-approve (everyone needs another owner's or a designated approver's approval). The user never " +
+			"approves their own request; when nobody else can, they confirm the task once with their second factor " +
+			"(confirmRequired). Then no value comes back, only approvalRequired, an approvalUrl, a useId, a runId and " +
+			"pending (every request still waiting in the run). All the requests of one task share one page and one " +
+			"decision: pass the returned runId on every later request in the same task, and pass task (one short line " +
+			"saying what you're doing, shown on that page) on each. Ask for every secret the task needs first, then " +
+			"open approvalUrl in the user's browser, once, with the environment's browser opener; after it's approved " +
+			"or confirmed, call " + toolRedeem + " with each useId. Start a new task without a runId. Approval levels cover personal tokens only: a " +
 			"service-account token's reveal is never held for approval, and is governed by the account's access rules " +
 			"and the \"Allow API access to sensitive secrets\" setting.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
@@ -750,10 +765,10 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: toolRedeem,
-		Description: "Collect a personal token's reveal the owner has approved, using the useId from " +
-			"sneakers_get_secret, once for each useId of the run. Returns " +
-			"pending (with the approvalUrl) until they approve: if it wasn't opened yet, open approvalUrl in the user's " +
-			"browser with the environment's browser opener, then call again after they approve. The value is released " +
+		Description: "Collect a personal token's reveal once it's approved by an owner or approver, or confirmed " +
+			"by the user, using the useId from sneakers_get_secret, once for each useId of the run. Returns " +
+			"pending (with the approvalUrl) until then: if it wasn't opened yet, open approvalUrl in the user's " +
+			"browser with the environment's browser opener, then call again. The value is released " +
 			"once, within 60 seconds of approval.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, t.redeemReveal)
