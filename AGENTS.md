@@ -35,6 +35,10 @@ reach the SSH broker service.
 - Build: `task build`
 - Test: `task test`; the gateway and the JWKS are `httptest` servers, so nothing else is needed.
 - Lint: `task lint`.
+- Gateway contract: `internal/contract` checks every GraphQL operation against the gateway's
+  machine schema, vendored at the commit in `gateway-schema.env`; bump the ref and run
+  `scripts/gateway-schema-fetch.sh` when the gateway's schema changes (docs/api.md, "Gateway
+  contract").
 - Commands: `./scripts/cli-dist.sh` builds both for linux and darwin, amd64 and arm64.
 - License headers: `task license` (golic, the Apache-2.0 SPDX header in `.golic.yaml`).
 
