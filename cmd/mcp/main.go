@@ -79,8 +79,10 @@ func (c config) hydraEnabled() bool { return c.HydraIssuer != "" }
 // the service refuses to start rather than serve nothing or run unverified.
 func loadConfig() (config, error) {
 	cfg := config{
-		HTTPPort:      env("HTTP_PORT", "9101"),
-		OTLPEndpoint:  env("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+		HTTPPort: env("HTTP_PORT", "9101"),
+		// Empty means no collector: otel.Init runs without an exporter instead
+		// of retrying a default localhost address that is rarely there.
+		OTLPEndpoint:  env("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		HydraIssuer:   env("HYDRA_ISSUER", ""),
 		HydraJWKSURL:  env("HYDRA_JWKS_URL", "http://sneakers-hydra:4444/.well-known/jwks.json"),
 		HydraAudience: env("HYDRA_AUDIENCE", "sneakers-mcp"),
