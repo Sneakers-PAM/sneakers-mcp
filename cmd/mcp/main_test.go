@@ -373,7 +373,8 @@ func TestEndToEndToolCallForwardsEachCallersOwnToken(t *testing.T) {
 		}
 	}
 
-	want := []string{"Bearer " + tokA, "Bearer " + tokB, "Bearer " + tokA}
+	// get_secret reads the secret's summary, then the value: two calls each.
+	want := []string{"Bearer " + tokA, "Bearer " + tokA, "Bearer " + tokB, "Bearer " + tokB, "Bearer " + tokA, "Bearer " + tokA}
 	h.gwMu.Lock()
 	defer h.gwMu.Unlock()
 	if len(h.gwAuths) != len(want) {

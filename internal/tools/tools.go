@@ -188,15 +188,47 @@ type secretSummary struct {
 
 	RotationOptOut  bool `json:"rotationOptOut" jsonschema:"rotation is turned off for this secret"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut" jsonschema:"heartbeat checks are turned off for this secret"`
+
+	ValueVersion     int    `json:"valueVersion" jsonschema:"goes up each time the stored values change; if it differs from the version you read, re-fetch the value and re-scan anything that used it"`
+	ValueChangedAt   string `json:"valueChangedAt,omitempty" jsonschema:"RFC3339 time of the last value change"`
+	RotationEnabled  bool   `json:"rotationEnabled" jsonschema:"Sneakers rotates this secret on its target, on a schedule or on demand"`
+	RotatesOnCheckin bool   `json:"rotatesOnCheckin" jsonschema:"checking the secret in after a check-out rotates its value, so a value read during the check-out stops working"`
+	HeartbeatEnabled bool   `json:"heartbeatEnabled" jsonschema:"heartbeat checks run against the target"`
+
+	LastRotationResult  string `json:"lastRotationResult,omitempty" jsonschema:"last rotation outcome: OK, FAILED, DEGRADED or ROTATING"`
+	RotatedAt           string `json:"rotatedAt,omitempty" jsonschema:"RFC3339 time of the last successful rotation"`
+	NextRotationAt      string `json:"nextRotationAt,omitempty" jsonschema:"RFC3339 time of the next scheduled rotation"`
+	LastHeartbeatResult string `json:"lastHeartbeatResult,omitempty" jsonschema:"last heartbeat outcome: OK, FAILED, UNREACHABLE or UNKNOWN"`
 }
 
 func summaryOf(s gwclient.SecretSummary) secretSummary {
 	out := secretSummary{ID: s.ID, Name: s.Name, FolderID: s.FolderID, TypeID: s.TypeID,
-		RotationOptOut: s.RotationOptOut, HeartbeatOptOut: s.HeartbeatOptOut}
+		RotationOptOut: s.RotationOptOut, HeartbeatOptOut: s.HeartbeatOptOut,
+		ValueVersion: s.ValueVersion, ValueChangedAt: strOf(s.ValueChangedAt),
+		RotationEnabled: s.RotationEnabled, RotatesOnCheckin: s.RotatesOnCheckin, HeartbeatEnabled: s.HeartbeatEnabled,
+		LastRotationResult: strOf(s.LastRotationResult), RotatedAt: strOf(s.RotatedAt),
+		NextRotationAt: strOf(s.NextRotationAt), LastHeartbeatResult: strOf(s.LastHeartbeatResult)}
 	if s.TargetID != nil {
 		out.TargetID = *s.TargetID
 	}
 	return out
+}
+
+func strOf(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func checkRFC3339(name, v string) error {
+	if v == "" {
+		return nil
+	}
+	if _, err := time.Parse(time.RFC3339, v); err != nil {
+		return fmt.Errorf("%s must be an RFC3339 time such as 2026-09-01T00:00:00Z", name)
+	}
+	return nil
 }
 
 type fieldIn struct {
@@ -218,6 +250,8 @@ type findSecretsIn struct {
 	Query    string `json:"query,omitempty" jsonschema:"case-insensitive substring match on the secret name"`
 	FolderID string `json:"folderId,omitempty" jsonschema:"restrict to this folder id"`
 	TypeID   string `json:"typeId,omitempty" jsonschema:"restrict to this secret type id"`
+
+	ChangedSince string `json:"changedSince,omitempty" jsonschema:"RFC3339 time; only secrets whose value changed at or after it, such as the time you last read them"`
 }
 type findSecretsOut struct {
 	Secrets []secretSummary `json:"secrets"`
@@ -229,10 +263,11 @@ func (t *toolset) findSecrets(ctx context.Context, req *mcp.CallToolRequest, in 
 		func() error {
 			return checkAll(checkLen("query", in.Query, maxQueryLen, false),
 				checkLen("folderId", in.FolderID, maxIDLen, false),
-				checkLen("typeId", in.TypeID, maxIDLen, false))
+				checkLen("typeId", in.TypeID, maxIDLen, false),
+				checkRFC3339("changedSince", in.ChangedSince))
 		},
 		func(token string) error {
-			found, err := t.gw.FindSecrets(ctx, token, in.Query, in.FolderID, in.TypeID)
+			found, err := t.gw.FindSecretsChangedSince(ctx, token, in.Query, in.FolderID, in.TypeID, in.ChangedSince)
 			for _, s := range found {
 				out.Secrets = append(out.Secrets, summaryOf(s))
 			}
@@ -339,15 +374,28 @@ type pendingUse struct {
 	ExpiresAtUnix int64  `json:"expiresAtUnix"`
 }
 type getSecretOut struct {
-	Value            string       `json:"value"`
-	ApprovalRequired bool         `json:"approvalRequired,omitempty"`
-	ConfirmRequired  bool         `json:"confirmRequired,omitempty"`
-	ApprovalURL      string       `json:"approvalUrl,omitempty"`
-	UseID            string       `json:"useId,omitempty"`
-	ExpiresAtUnix    int64        `json:"expiresAtUnix,omitempty"`
-	Message          string       `json:"message,omitempty"`
-	RunID            string       `json:"runId,omitempty"`
-	Pending          []pendingUse `json:"pending,omitempty"`
+	Value            string         `json:"value"`
+	Secret           *secretSummary `json:"secret,omitempty" jsonschema:"the secret's metadata, read just before the value: keep valueVersion with the value and re-fetch when it changes"`
+	ApprovalRequired bool           `json:"approvalRequired,omitempty"`
+	ConfirmRequired  bool           `json:"confirmRequired,omitempty"`
+	ApprovalURL      string         `json:"approvalUrl,omitempty"`
+	UseID            string         `json:"useId,omitempty"`
+	ExpiresAtUnix    int64          `json:"expiresAtUnix,omitempty"`
+	Message          string         `json:"message,omitempty"`
+	RunID            string         `json:"runId,omitempty"`
+	Pending          []pendingUse   `json:"pending,omitempty"`
+}
+
+// secretMeta reads a secret's summary for getSecret. It's best effort: the
+// value is what was asked for, so a failed read only leaves the summary out.
+func (t *toolset) secretMeta(ctx context.Context, token, id string) *secretSummary {
+	s, err := t.gw.GetSecret(ctx, token, id)
+	if err != nil {
+		t.log.Debug().Str("secret_id", id).Str("error", err.Error()).Msg("secret summary unavailable; returning the value without it")
+		return nil
+	}
+	out := summaryOf(*s)
+	return &out
 }
 
 func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in getSecretIn) (*mcp.CallToolResult, getSecretOut, error) {
@@ -358,9 +406,15 @@ func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in ge
 				checkRunID(in.RunID), checkLen("task", in.Task, maxTaskLen, false))
 		},
 		func(token string) error {
+			// Read the summary before the value, so the version handed back can
+			// only be older than the value, never newer: a change is never hidden.
+			meta := t.secretMeta(ctx, token, in.ID)
 			v, err := t.gw.RevealField(ctx, token, in.ID, in.FieldKey)
 			if !needsApproval(err) {
 				out.Value = v
+				if err == nil {
+					out.Secret = meta
+				}
 				return err
 			}
 			run := gwclient.Run{ID: in.RunID, Purpose: in.Task}

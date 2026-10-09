@@ -84,7 +84,8 @@ func TestAPITokenGoodEndToEnd(t *testing.T) {
 
 	h.gwMu.Lock()
 	defer h.gwMu.Unlock()
-	if len(h.gwAuths) != 1 || h.gwAuths[0] != "Bearer "+tok {
+	// get_secret reads the secret's summary, then the value: two calls.
+	if len(h.gwAuths) != 2 || h.gwAuths[0] != "Bearer "+tok || h.gwAuths[1] != "Bearer "+tok {
 		t.Fatalf("tool call must forward the caller's token unchanged, got %v", h.gwAuths)
 	}
 	// initialize + notifications + tools/call arrive as separate POSTs;

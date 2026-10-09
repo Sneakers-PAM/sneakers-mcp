@@ -197,3 +197,22 @@ used, the folder asked for, the rule (`REQUESTED`, `PERSONAL_DEFAULT`,
 `KEPT_BY_CALLER`, `ALREADY_PERSONAL` or `NO_PERSONAL_FOLDER`) and the reason,
 which names the matching part, never a value. The gateway decides; this needs
 the gateway's `keepFolder` argument and `SecretSummary.placement`.
+
+## Change signals
+
+So an agent knows when a value it holds may have gone stale, every secret
+summary carries `valueVersion` (goes up whenever the stored value changes;
+re-fetch and re-scan when it differs from the one you read), `valueChangedAt`,
+`rotationEnabled`, `rotatesOnCheckin` (checking the secret in after a
+check-out rotates the value), `heartbeatEnabled`, and the last rotation and
+heartbeat results. None carry a value.
+
+- `sneakers_find_secrets` takes `changedSince` (RFC3339) to list only secrets
+  whose value changed at or after that time; a bad time is refused before the
+  gateway is called.
+- `sneakers_get_secret` reads the secret's summary just before the value and
+  returns it as `secret`, so the version it reports is never newer than the
+  value. If the gateway can't return the summary, the value still comes back,
+  without `secret`.
+
+These need the gateway's `secretForPrincipal` and the `changedSince` argument.
