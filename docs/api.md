@@ -23,6 +23,21 @@ such as a RACI denial come back to the agent as tool errors with the gateway's m
 failures come back as a generic gateway error. Every result is returned both as structured content
 and as the same JSON in the text content, for clients that read only text.
 
+## Gateway contract
+
+Every GraphQL operation the MCP server and the commands send is checked against the gateway's
+machine schema in `internal/contract` (`go test ./internal/contract/`). The schema is vendored in
+`internal/contract/testdata/machine.graphqls` at the gateway commit pinned in `gateway-schema.env`.
+A field, argument or type the gateway doesn't have fails the test, where it would otherwise fail on
+a running box as HTTP 422 `GRAPHQL_VALIDATION_FAILED`. Every query passed to the gateway client
+must be a string constant, so the test sees all of them.
+
+When the gateway's machine schema changes, set `SNEAKERS_GATEWAY_REF` to the gateway commit, run
+`scripts/gateway-schema-fetch.sh` and commit the schema in the same change. Point
+`SNEAKERS_GATEWAY_SCHEMA` at a local `machine.graphqls` to try an unmerged gateway change. A tool
+that needs a new gateway field lands only after the gateway change is on its `main` and pinned
+here.
+
 ## Tools
 
 | Tool | Kind | What it does |
