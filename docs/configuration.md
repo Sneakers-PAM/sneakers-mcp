@@ -15,7 +15,7 @@ with a fatal log line and a non-zero exit.
 | `HYDRA_AUDIENCE` | `sneakers-mcp` | The required `aud`. Must match the gateway's `HYDRA_AUDIENCE`. |
 | `MCP_RESOURCE_URL` | (none) | This server's public URL, for example `https://sneakers-mcp.example.org/mcp`. Advertised in the protected-resource metadata. Required when `HYDRA_ISSUER` is set; without it no metadata is served. |
 | `MCP_AUTHORIZATION_SERVER` | (none) | The Sneakers sign-in issuer (the gateway's OAuth server on the UI host, for example `https://sneakers.example.org`). Advertised as the authorization server, so OAuth-capable MCP clients can sign the user in and receive a personal token. Without it, Ory Hydra mode advertises `HYDRA_ISSUER`. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | OTLP gRPC collector (`host:port`) for metrics and traces. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | (none) | OTLP gRPC collector (`host:port`) for metrics and traces. Unset or empty runs without a collector: no export, no error log. |
 | `SERVICE_VERSION` | the build stamp (`dev` when unstamped) | Reported as the version in MCP `serverInfo`. |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn` or `error`. |
 | `LOG_FORMAT` | `json` | `json` for clusters; `console` for local development. |
@@ -59,5 +59,5 @@ GATEWAY_MACHINE_GRAPHQL_URL=http://localhost:9100/machine/graphql \
 go run ./cmd/mcp
 ```
 
-The server starts and serves without a collector on `localhost:4317`; only the telemetry export
-fails.
+The server starts and serves with no `OTEL_EXPORTER_OTLP_ENDPOINT` set; the telemetry export is
+simply off, with no error log.

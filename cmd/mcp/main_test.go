@@ -63,12 +63,16 @@ func TestLoadConfigAPITokensDefaultOn(t *testing.T) {
 	t.Setenv("HYDRA_ISSUER", "")
 	t.Setenv("MCP_RESOURCE_URL", "")
 	t.Setenv("MCP_ACCEPT_API_TOKENS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatalf("API-only mode must start without Hydra: %v", err)
 	}
 	if cfg.hydraEnabled() || !cfg.AcceptAPITokens {
 		t.Fatalf("modes wrong: %+v", cfg)
+	}
+	if cfg.OTLPEndpoint != "" {
+		t.Fatalf("default OTLPEndpoint got %q, want empty (no collector)", cfg.OTLPEndpoint)
 	}
 	if _, err := buildHandler(cfg, zerolog.Nop()); err != nil {
 		t.Fatalf("buildHandler in API-only mode: %v", err)
