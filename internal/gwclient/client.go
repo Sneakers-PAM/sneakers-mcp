@@ -56,17 +56,38 @@ type SecretSummary struct {
 
 	RotationOptOut  bool `json:"rotationOptOut"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut"`
+
+	// Placement is set on a create or generate only.
+	Placement *Placement `json:"placement,omitempty"`
 }
+
+// Placement is where the gateway stored a new secret and why. A personal
+// token's secret that names its owner goes to the owner's Personal folder
+// unless KeepFolder is set. Rule is REQUESTED, PERSONAL_DEFAULT,
+// KEPT_BY_CALLER, ALREADY_PERSONAL or NO_PERSONAL_FOLDER; Reason names the
+// matching part, never a value.
+type Placement struct {
+	FolderID          string `json:"folderId"`
+	RequestedFolderID string `json:"requestedFolderId"`
+	Rule              string `json:"rule"`
+	Reason            string `json:"reason"`
+}
+
+// placementFields is the placement selection for a create or generate.
+const placementFields = ` placement{folderId requestedFolderId rule reason}`
 
 // summaryFields is the selection every SecretSummary result uses, so no
 // operation drops a field the others return.
 const summaryFields = `id name folderId typeId targetId rotationOptOut heartbeatOptOut`
 
 // Automation opts a new secret out of rotation and/or heartbeat, so a
-// credential that must never rotate never gets a schedule.
+// credential that must never rotate never gets a schedule. KeepFolder opts
+// out of the gateway's Personal-folder default for a secret that names its
+// caller.
 type Automation struct {
 	DisableRotation  bool
 	DisableHeartbeat bool
+	KeepFolder       bool
 }
 
 // automationVars adds the opt-outs to a create or generate call. An unset opt-out is
@@ -77,6 +98,7 @@ func automationVars(vars map[string]any, auto []Automation) {
 		a = auto[0]
 	}
 	vars["disableRotation"], vars["disableHeartbeat"] = nilIfFalse(a.DisableRotation), nilIfFalse(a.DisableHeartbeat)
+	vars["keepFolder"] = nilIfFalse(a.KeepFolder)
 }
 
 func nilIfFalse(b bool) any {
@@ -282,12 +304,13 @@ func (c *Client) RevealField(ctx context.Context, token, id, fieldKey string) (s
 	return *out.Value, nil
 }
 
-const createQuery = `mutation Create($folderId:ID!,$typeId:ID!,$name:String!,$fields:[SecretFieldInput!]!,$targetId:ID,$disableRotation:Boolean,$disableHeartbeat:Boolean){
-  createSecretForPrincipal(folderId:$folderId,typeId:$typeId,name:$name,fields:$fields,targetId:$targetId,disableRotation:$disableRotation,disableHeartbeat:$disableHeartbeat){` + summaryFields + `}
+const createQuery = `mutation Create($folderId:ID!,$typeId:ID!,$name:String!,$fields:[SecretFieldInput!]!,$targetId:ID,$disableRotation:Boolean,$disableHeartbeat:Boolean,$keepFolder:Boolean){
+  createSecretForPrincipal(folderId:$folderId,typeId:$typeId,name:$name,fields:$fields,targetId:$targetId,disableRotation:$disableRotation,disableHeartbeat:$disableHeartbeat,keepFolder:$keepFolder){` + summaryFields + placementFields + `}
 }`
 
 // CreateSecret stores a secret with caller-supplied fields. At most one
-// Automation is used.
+// Automation is used. The gateway may store it in the caller's Personal
+// folder instead of folderID; the summary's Placement says where and why.
 func (c *Client) CreateSecret(ctx context.Context, token, folderID, typeID, name string, fields []Field, targetID string, auto ...Automation) (*SecretSummary, error) {
 	var out struct {
 		Secret *SecretSummary `json:"createSecretForPrincipal"`
@@ -303,15 +326,16 @@ func (c *Client) CreateSecret(ctx context.Context, token, folderID, typeID, name
 	return out.Secret, nil
 }
 
-const generateQuery = `mutation Generate($folderId:ID!,$typeId:ID!,$name:String!,$fields:[SecretFieldInput!]!,$policyId:ID,$targetId:ID,$returnValue:Boolean,$disableRotation:Boolean,$disableHeartbeat:Boolean){
-  generateSecretForPrincipal(folderId:$folderId,typeId:$typeId,name:$name,fields:$fields,policyId:$policyId,targetId:$targetId,returnValue:$returnValue,disableRotation:$disableRotation,disableHeartbeat:$disableHeartbeat){
-    secret{` + summaryFields + `} generatedValue
+const generateQuery = `mutation Generate($folderId:ID!,$typeId:ID!,$name:String!,$fields:[SecretFieldInput!]!,$policyId:ID,$targetId:ID,$returnValue:Boolean,$disableRotation:Boolean,$disableHeartbeat:Boolean,$keepFolder:Boolean){
+  generateSecretForPrincipal(folderId:$folderId,typeId:$typeId,name:$name,fields:$fields,policyId:$policyId,targetId:$targetId,returnValue:$returnValue,disableRotation:$disableRotation,disableHeartbeat:$disableHeartbeat,keepFolder:$keepFolder){
+    secret{` + summaryFields + placementFields + `} generatedValue
   }
 }`
 
 // GenerateSecret generates a policy-compliant password and stores the
 // secret. The generated value is returned only when returnValue is true. At
-// most one Automation is used.
+// most one Automation is used. As with CreateSecret, the summary's Placement
+// says where the gateway stored it and why.
 func (c *Client) GenerateSecret(ctx context.Context, token, folderID, typeID, name string, fields []Field, policyID, targetID string, returnValue bool, auto ...Automation) (*SecretSummary, string, error) {
 	var out struct {
 		Generated *struct {

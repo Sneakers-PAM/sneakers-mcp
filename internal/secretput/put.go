@@ -30,6 +30,9 @@ type Request struct {
 
 	FolderID, TypeID, Name string
 	DisableRotation        bool
+	// KeepFolder keeps FolderID for a secret that names its caller, which the
+	// gateway would otherwise store in the caller's Personal folder.
+	KeepFolder bool
 
 	SecretID string
 
@@ -41,6 +44,8 @@ type Request struct {
 type Result struct {
 	ID, Name string
 	Changed  []string
+	// Placement is set on a create: where the gateway stored it and why.
+	Placement *gwclient.Placement
 }
 
 // plainKinds may be given as a literal. Anything else, including a key the
@@ -69,9 +74,9 @@ func Put(ctx context.Context, gw Gateway, r Request) (Result, error) {
 		err = uerr
 	} else {
 		s, cerr := gw.CreateSecret(ctx, r.Token, r.FolderID, r.TypeID, r.Name, fields, "",
-			gwclient.Automation{DisableRotation: r.DisableRotation})
+			gwclient.Automation{DisableRotation: r.DisableRotation, KeepFolder: r.KeepFolder})
 		if cerr == nil {
-			res = Result{ID: s.ID, Name: s.Name}
+			res = Result{ID: s.ID, Name: s.Name, Placement: s.Placement}
 		}
 		err = cerr
 	}
