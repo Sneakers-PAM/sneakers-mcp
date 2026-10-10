@@ -3,7 +3,7 @@ module github.com/Sneakers-PAM/sneakers-mcp
 go 1.26.9
 
 require (
-	github.com/Bugs5382/go-buildinfo v1.0.0
+	github.com/Bugs5382/go-buildinfo v1.1.0
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/Bugs5382/go-otel v1.3.2
 	github.com/golang-jwt/jwt/v5 v5.3.1

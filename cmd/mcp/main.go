@@ -163,7 +163,7 @@ func buildVerifier(cfg config) (*authn.Verifier, error) {
 
 // buildHandler wires the verifier, gateway client and MCP server into the
 // service's routes.
-func buildHandler(cfg config, logger zerolog.Logger) (http.Handler, error) {
+func buildHandler(ctx context.Context, cfg config, logger zerolog.Logger) (http.Handler, error) {
 	verifier, err := buildVerifier(cfg)
 	if err != nil {
 		return nil, err
@@ -213,6 +213,7 @@ func buildHandler(cfg config, logger zerolog.Logger) (http.Handler, error) {
 	if err := mountHealth(mux, checker); err != nil {
 		return nil, err
 	}
+	go checker.Run(ctx)
 	return withLogging(mux, logger), nil
 }
 
@@ -285,7 +286,7 @@ func main() {
 		}
 	}()
 
-	handler, err := buildHandler(cfg, logger)
+	handler, err := buildHandler(ctx, cfg, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("wiring")
 	}
