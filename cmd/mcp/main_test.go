@@ -74,7 +74,7 @@ func TestLoadConfigAPITokensDefaultOn(t *testing.T) {
 	if cfg.OTLPEndpoint != "" {
 		t.Fatalf("default OTLPEndpoint got %q, want empty (no collector)", cfg.OTLPEndpoint)
 	}
-	if _, err := buildHandler(cfg, zerolog.Nop()); err != nil {
+	if _, err := buildHandler(t.Context(), cfg, zerolog.Nop()); err != nil {
 		t.Fatalf("buildHandler in API-only mode: %v", err)
 	}
 }
@@ -86,7 +86,7 @@ func TestLoadConfigNothingConfiguredFails(t *testing.T) {
 		t.Fatal("loadConfig must refuse to start with no bearer mode")
 	}
 	// buildHandler must fail closed on its own too, not rely on loadConfig.
-	if _, err := buildHandler(config{GatewayURL: "http://gw"}, zerolog.Nop()); err == nil {
+	if _, err := buildHandler(t.Context(), config{GatewayURL: "http://gw"}, zerolog.Nop()); err == nil {
 		t.Fatal("buildHandler must refuse a config with no bearer mode")
 	}
 }
@@ -169,6 +169,11 @@ func newHarnessWith(t *testing.T, mut func(*config)) *harness {
 	}))
 	t.Cleanup(jwks.Close)
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The background readiness check of the gateway, not a tool call.
+		if r.URL.Path == "/readyz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		authz := r.Header.Get("Authorization")
 		h.gwMu.Lock()
@@ -210,7 +215,7 @@ func newHarnessWith(t *testing.T, mut func(*config)) *harness {
 	if mut != nil {
 		mut(&cfg)
 	}
-	handler, err := buildHandler(cfg, zerolog.New(h.logs))
+	handler, err := buildHandler(t.Context(), cfg, zerolog.New(h.logs))
 	if err != nil {
 		t.Fatalf("buildHandler: %v", err)
 	}

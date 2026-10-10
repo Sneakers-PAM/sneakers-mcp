@@ -38,7 +38,9 @@ audience, the resource URL and the gateway URL. A stop is a fatal log line and a
 - `GET /livez` is liveness. It answers `200` whenever the process does, and checks no dependency,
   so a gateway or Hydra outage never restarts the pod.
 - `GET /readyz` is readiness. It answers `503` while a required dependency is down, and `200`
-  otherwise, recovering on its own. Checks are cached for 5 seconds; each has a 1-second timeout.
+  otherwise, recovering on its own. The checks run in the background every 5 seconds, each with a 1-second
+  timeout, and `/readyz` only reads their last result, so a slow gateway never makes the probe wait.
+  Right after the start, before the first pass, each dependency is `down` with the class `pending`.
 - Both carry the build in `Sneakers-Version` and `Sneakers-Commit` headers (go-buildinfo); the
   gateway's diagnostics read them from `/livez`. There is no plain `/health` route.
 
