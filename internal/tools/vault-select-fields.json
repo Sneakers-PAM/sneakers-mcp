@@ -1,0 +1,71 @@
+{
+  "types": [
+    {
+      "id": "type-ssh-key",
+      "fields": [
+        {
+          "key": "keyFormat",
+          "label": "Key Format",
+          "kind": "SELECT",
+          "required": true,
+          "options": [
+            "Ed25519",
+            "RSA 4096",
+            "RSA 2048",
+            "ECDSA P-256"
+          ],
+          "defaultValue": "Ed25519"
+        }
+      ]
+    },
+    {
+      "id": "type-api-token",
+      "fields": [
+        {
+          "key": "scheme",
+          "label": "Scheme",
+          "kind": "SELECT",
+          "options": [
+            "Bearer",
+            "OAuth",
+            "Custom header"
+          ],
+          "defaultValue": "Bearer"
+        }
+      ]
+    },
+    {
+      "id": "type-database-account",
+      "fields": [
+        {
+          "key": "engine",
+          "label": "Engine",
+          "kind": "SELECT",
+          "options": [
+            "PostgreSQL",
+            "MySQL / MariaDB",
+            "SQL Server",
+            "Oracle",
+            "MongoDB",
+            "Other"
+          ],
+          "defaultValue": "PostgreSQL"
+        }
+      ]
+    },
+    {
+      "id": "type-active-directory",
+      "fields": [
+        {
+          "key": "logonFormat",
+          "label": "Logon format",
+          "kind": "SELECT",
+          "options": [
+            "NETBIOS",
+            "UPN"
+          ]
+        }
+      ]
+    }
+  ]
+}
