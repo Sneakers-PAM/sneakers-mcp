@@ -78,7 +78,8 @@ read. The one exception is a secret with an approval level, decided by the vault
 The user never approves their own request. When nobody else can decide (a single-user install, or
 an always-approve secret whose only approver is the user), the user confirms the task once in the
 browser with their second factor instead, and the result says so with `confirmRequired`.
-Break-glass is unchanged and isn't reachable through the MCP.
+Break-glass is for people only, not the MCP or any agent: the gateway refuses it to anything but
+a person's own signed-in web session, so it isn't reachable through the MCP, and never will be.
 
 For such a reveal, `sneakers_get_secret` prepares it and returns its `approvalUrl` and `useId`. The
 result tells the agent to open the page in the user's browser at once with its own opener
