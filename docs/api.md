@@ -38,6 +38,18 @@ When the gateway's machine schema changes, set `SNEAKERS_GATEWAY_REF` to the gat
 that needs a new gateway field lands only after the gateway change is on its `main` and pinned
 here.
 
+## SELECT options
+
+A SELECT field takes one of its type's options; the vault refuses any other value on every create
+and update, with a message that names the field and lists the options, which the tool error
+carries to the agent. A value that differs from one option only in letter case is stored as that
+option. The descriptions of `sneakers_create_secret`, `sneakers_generate_secret` and
+`sneakers_update_secret` list each built-in SELECT field with its options, read from the vault's
+catalogue (`gen/catalogue/types.json`), whose SELECT fields are vendored in
+`internal/tools/vault-select-fields.json` at the vault commit pinned in `vault-catalogue.env`. When the vault's catalogue changes, set `SNEAKERS_VAULT_REF` to the vault
+commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the file in the same change. Point
+`SNEAKERS_VAULT_CATALOGUE` at a local `gen/catalogue/types.json` to try an unmerged vault change.
+
 ## Tools
 
 | Tool | Kind | What it does |

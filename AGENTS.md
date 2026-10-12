@@ -39,6 +39,11 @@ reach the SSH broker service.
   machine schema, vendored at the commit in `gateway-schema.env`; bump the ref and run
   `scripts/gateway-schema-fetch.sh` when the gateway's schema changes (docs/api.md, "Gateway
   contract").
+- Vault catalogue: the write tools list SELECT options from
+  `internal/tools/vault-select-fields.json`, the SELECT fields of the vault's catalogue vendored
+  at the vault commit in `vault-catalogue.env`; bump the ref and run
+  `scripts/vault-catalogue-fetch.sh` when the vault's catalogue changes (docs/api.md, "SELECT
+  options").
 - Commands: `./scripts/cli-dist.sh` builds both for linux and darwin, amd64 and arm64.
 - License headers: `task license` (golic, the Apache-2.0 SPDX header in `.golic.yaml`).
 

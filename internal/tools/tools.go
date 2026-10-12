@@ -852,7 +852,7 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 			"(a key file, a password file, another tool's output), or would otherwise pass through the transcript, " +
 			"do not call this tool: have the user run the local sneakers-put command " +
 			"(sneakers-put -folder <id> -type <id> -name <name> -field password=@file), which reads the value itself " +
-			"and prints only the id and name. " + neverRotateHint,
+			"and prints only the id and name. " + neverRotateHint + " " + selectOptionsHint(),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
 	}, t.createSecret)
 
@@ -860,7 +860,8 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 		Name: toolGenerate,
 		Description: "Generate a policy-compliant password and store it as a new secret. Set returnValue only if the caller " +
 			"genuinely needs the plaintext back: a returned value is written into this session's transcript. To store a " +
-			"value that already exists on disk, use the local sneakers-put command instead of passing it here. " + neverRotateHint,
+			"value that already exists on disk, use the local sneakers-put command instead of passing it here. " + neverRotateHint +
+			" " + selectOptionsHint(),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
 	}, t.generateSecret)
 

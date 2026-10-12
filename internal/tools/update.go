@@ -119,7 +119,7 @@ func registerUpdateTool(s *mcp.Server, t *toolset) {
 			"go through this tool: have the user run the local sneakers-put command " +
 			"(sneakers-put -id <id> -field key=@file). Returns the secret summary and the keys whose value changed, " +
 			"never values. Requires author access to the secret; the previous values stay in version history. The " +
-			"call is audited as an update against the token's user or service account.",
+			"call is audited as an update against the token's user or service account. " + selectOptionsHint(),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), IdempotentHint: true, OpenWorldHint: ptr(false)},
 	}, t.updateSecret)
 }
