@@ -241,7 +241,9 @@ heartbeat results. None carry a value.
 
 `heartbeatEnabled` false on a heartbeat-capable type can mean it's opted out, or that the target
 isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key — a new secret's
-heartbeat starts off until that's true, rather than failing checks from the first poll. Fix what's
+heartbeat starts off until that's true, rather than failing checks from the first poll. When it's
+the latter, `heartbeatBlockedReason` names exactly what's missing ("no target", "no connection" or
+"no pinned host key"); it's absent once heartbeat is running or opted out on purpose. Fix what's
 missing, then turn it on with `sneakers_set_secret_automation`; asking before then is refused,
 naming what's still missing.
 

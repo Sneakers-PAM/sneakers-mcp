@@ -189,11 +189,12 @@ type secretSummary struct {
 	RotationOptOut  bool `json:"rotationOptOut" jsonschema:"rotation is turned off for this secret"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut" jsonschema:"heartbeat checks are turned off for this secret"`
 
-	ValueVersion     int    `json:"valueVersion" jsonschema:"goes up each time the stored values change; if it differs from the version you read, re-fetch the value and re-scan anything that used it"`
-	ValueChangedAt   string `json:"valueChangedAt,omitempty" jsonschema:"RFC3339 time of the last value change"`
-	RotationEnabled  bool   `json:"rotationEnabled" jsonschema:"Sneakers rotates this secret on its target, on a schedule or on demand"`
-	RotatesOnCheckin bool   `json:"rotatesOnCheckin" jsonschema:"checking the secret in after a check-out rotates its value, so a value read during the check-out stops working"`
-	HeartbeatEnabled bool   `json:"heartbeatEnabled" jsonschema:"heartbeat checks run against the target. For a heartbeat-capable type, false can mean it's opted out OR that the target isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key. Fix that, then turn it on with sneakers_set_secret_automation; turning it on before then is refused, naming what's missing"`
+	ValueVersion           int    `json:"valueVersion" jsonschema:"goes up each time the stored values change; if it differs from the version you read, re-fetch the value and re-scan anything that used it"`
+	ValueChangedAt         string `json:"valueChangedAt,omitempty" jsonschema:"RFC3339 time of the last value change"`
+	RotationEnabled        bool   `json:"rotationEnabled" jsonschema:"Sneakers rotates this secret on its target, on a schedule or on demand"`
+	RotatesOnCheckin       bool   `json:"rotatesOnCheckin" jsonschema:"checking the secret in after a check-out rotates its value, so a value read during the check-out stops working"`
+	HeartbeatEnabled       bool   `json:"heartbeatEnabled" jsonschema:"heartbeat checks run against the target. For a heartbeat-capable type, false can mean it's opted out OR that the target isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key. Fix that, then turn it on with sneakers_set_secret_automation; turning it on before then is refused, naming what's missing"`
+	HeartbeatBlockedReason string `json:"heartbeatBlockedReason,omitempty" jsonschema:"why heartbeatEnabled is false and not by choice: no target, no connection, or (SSH Key only) no pinned host key. Absent once heartbeat is running, when it's opted out on purpose, or when the type has no heartbeat at all"`
 
 	LastRotationResult  string `json:"lastRotationResult,omitempty" jsonschema:"last rotation outcome: OK, FAILED, DEGRADED or ROTATING"`
 	RotatedAt           string `json:"rotatedAt,omitempty" jsonschema:"RFC3339 time of the last successful rotation"`
@@ -206,7 +207,8 @@ func summaryOf(s gwclient.SecretSummary) secretSummary {
 		RotationOptOut: s.RotationOptOut, HeartbeatOptOut: s.HeartbeatOptOut,
 		ValueVersion: s.ValueVersion, ValueChangedAt: strOf(s.ValueChangedAt),
 		RotationEnabled: s.RotationEnabled, RotatesOnCheckin: s.RotatesOnCheckin, HeartbeatEnabled: s.HeartbeatEnabled,
-		LastRotationResult: strOf(s.LastRotationResult), RotatedAt: strOf(s.RotatedAt),
+		HeartbeatBlockedReason: strOf(s.HeartbeatBlockedReason),
+		LastRotationResult:     strOf(s.LastRotationResult), RotatedAt: strOf(s.RotatedAt),
 		NextRotationAt: strOf(s.NextRotationAt), LastHeartbeatResult: strOf(s.LastHeartbeatResult)}
 	if s.TargetID != nil {
 		out.TargetID = *s.TargetID
