@@ -796,6 +796,7 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 	registerOrganizeTools(s, t)
 	registerAutomationTool(s, t)
 	registerUpdateTool(s, t)
+	registerRotateTools(s, t)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        toolFind,

@@ -350,7 +350,7 @@ func listRegisteredTools(t *testing.T) []*mcp.Tool {
 	return res.Tools
 }
 
-func TestRegisterExposesExactlyTheNineteenTools(t *testing.T) {
+func TestRegisterExposesExactlyTheTwentyOneTools(t *testing.T) {
 	var names []string
 	readOnly := map[string]bool{}
 	for _, tl := range listRegisteredTools(t) {
@@ -360,7 +360,8 @@ func TestRegisterExposesExactlyTheNineteenTools(t *testing.T) {
 	slices.Sort(names)
 	want := []string{"sneakers_change_secret_type", "sneakers_create_folder", "sneakers_create_secret", "sneakers_find_secrets", "sneakers_generate_secret",
 		"sneakers_get_secret", "sneakers_list_connections", "sneakers_list_folders", "sneakers_list_secret_types", "sneakers_list_targets",
-		"sneakers_move_secret", "sneakers_redeem_reveal", "sneakers_rename_folder", "sneakers_rename_secret", "sneakers_save_target",
+		"sneakers_move_secret", "sneakers_redeem_reveal", "sneakers_rename_folder", "sneakers_rename_secret", "sneakers_restore_secret_version",
+		"sneakers_rotate_secret", "sneakers_save_target",
 		"sneakers_set_secret_automation", "sneakers_set_secret_target", "sneakers_test_secret", "sneakers_update_secret"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
@@ -369,6 +370,7 @@ func TestRegisterExposesExactlyTheNineteenTools(t *testing.T) {
 		"sneakers_find_secrets": true, "sneakers_get_secret": true, "sneakers_list_folders": true, "sneakers_list_secret_types": true,
 		"sneakers_list_connections": true, "sneakers_list_targets": true,
 		"sneakers_create_secret": false, "sneakers_generate_secret": false, "sneakers_save_target": false, "sneakers_set_secret_target": false,
+		"sneakers_rotate_secret": false, "sneakers_restore_secret_version": false,
 		"sneakers_rename_secret": false, "sneakers_create_folder": false, "sneakers_rename_folder": false,
 		"sneakers_set_secret_automation": false, "sneakers_update_secret": false,
 	}

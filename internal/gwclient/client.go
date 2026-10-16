@@ -688,6 +688,46 @@ func (c *Client) SetSecretTarget(ctx context.Context, token, secretID, targetID 
 	return out.Secret, err
 }
 
+const rotateSecretMutation = `mutation Rotate($secretId:ID!,$policyId:ID){
+  rotateSecretForPrincipal(secretId:$secretId,policyId:$policyId){ secret{` + summaryFields + `} newValue }
+}`
+
+// RotateSecret regenerates the type's password field under its policy (or
+// the override named by policyID) and stores it as a new version. The new
+// value is always returned: the caller's reason to rotate (e.g. a
+// local-admin-password broker) is to push it to the target next, store then
+// set.
+func (c *Client) RotateSecret(ctx context.Context, token, secretID, policyID string) (SecretSummary, string, error) {
+	var out struct {
+		Rotated *struct {
+			Secret   SecretSummary `json:"secret"`
+			NewValue string        `json:"newValue"`
+		} `json:"rotateSecretForPrincipal"`
+	}
+	err := c.do(ctx, token, rotateSecretMutation, map[string]any{"secretId": secretID, "policyId": nilIfEmpty(policyID)}, &out)
+	if err != nil {
+		return SecretSummary{}, "", err
+	}
+	if out.Rotated == nil {
+		return SecretSummary{}, "", errors.New("gateway returned no secret")
+	}
+	return out.Rotated.Secret, out.Rotated.NewValue, nil
+}
+
+const restoreSecretVersionMutation = `mutation Restore($secretId:ID!,$versionNo:Int!){
+  restoreSecretVersionForPrincipal(secretId:$secretId,versionNo:$versionNo){` + summaryFields + `}
+}`
+
+// RestoreSecretVersion makes a prior version current again, as a new
+// version — never a history rewrite.
+func (c *Client) RestoreSecretVersion(ctx context.Context, token, secretID string, versionNo int) (SecretSummary, error) {
+	var out struct {
+		Secret SecretSummary `json:"restoreSecretVersionForPrincipal"`
+	}
+	err := c.do(ctx, token, restoreSecretVersionMutation, map[string]any{"secretId": secretID, "versionNo": versionNo}, &out)
+	return out.Secret, err
+}
+
 // CheckStatus is the last credential check of a secret against its target.
 type CheckStatus struct {
 	Result        string `json:"result"`

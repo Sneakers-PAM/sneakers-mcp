@@ -72,6 +72,8 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_list_targets` | read | Shared targets and the caller's own, each with `hostKeyFingerprints`: the SHA256 fingerprints of its pinned SSH host keys. |
 | `sneakers_save_target` | write | Creates a personal target, or updates one of the caller's own. The hostname is validated first. `hostKeys` pins its SSH host keys, but no token can set or clear them, not even a site admin's; a person pins them in the admin app (Targets → Scan and pin). |
 | `sneakers_set_secret_target` | write | Attaches or detaches a secret's target. |
+| `sneakers_rotate_secret` | destructive | Regenerates a secret's password field under its policy and stores it as a new version. Needs Author, never just read. The new value is always returned — store it, then set it on the target yourself. Refused while a scheduled rotation is already queued or running. |
+| `sneakers_restore_secret_version` | destructive | Makes an earlier version current again, as a new version — never a history rewrite. Needs Author. Refused while a scheduled rotation is queued or running. |
 | `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason) or unreachable, never a value. |
 
 Names may not contain `/`, because folder paths are joined with it.
@@ -169,6 +171,15 @@ never the keys; an empty list means the target isn't pinned.
 
 No tool reaches the SSH broker service, and the MCP server has no client for it. Brokered sessions
 are started by a person in the web app only.
+
+### Rotate and restore
+
+`sneakers_rotate_secret` and `sneakers_restore_secret_version` need Author on the secret (the same
+grant `sneakers_create_secret` needs), never just read — a token that can only reveal a secret
+cannot rotate or restore it. `sneakers_rotate_secret`'s new value is always returned, since the
+whole point of calling it is to push the value to the target next: store it, then set it on the
+host yourself, and call `sneakers_restore_secret_version` with the prior version number if that
+fails. Both are refused while a scheduled rotation of the secret is already queued or running.
 
 ## Client setup
 
