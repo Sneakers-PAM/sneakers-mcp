@@ -20,7 +20,7 @@ const neverRotateHint = "Credentials that must never rotate (for example a recov
 type setSecretAutomationIn struct {
 	ID               string `json:"id" jsonschema:"secret id, as returned by sneakers_find_secrets"`
 	DisableRotation  bool   `json:"disableRotation" jsonschema:"true turns rotation off; false turns it back on"`
-	DisableHeartbeat bool   `json:"disableHeartbeat" jsonschema:"true turns heartbeat checks off; false turns them back on"`
+	DisableHeartbeat bool   `json:"disableHeartbeat" jsonschema:"true turns heartbeat checks off; false turns them back on. Turning them back on is refused, naming what's missing, unless the secret has a target with a connection and, for SSH Key, a pinned host key"`
 }
 type setSecretAutomationOut struct {
 	Secret secretSummary `json:"secret"`

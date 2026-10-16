@@ -193,7 +193,7 @@ type secretSummary struct {
 	ValueChangedAt   string `json:"valueChangedAt,omitempty" jsonschema:"RFC3339 time of the last value change"`
 	RotationEnabled  bool   `json:"rotationEnabled" jsonschema:"Sneakers rotates this secret on its target, on a schedule or on demand"`
 	RotatesOnCheckin bool   `json:"rotatesOnCheckin" jsonschema:"checking the secret in after a check-out rotates its value, so a value read during the check-out stops working"`
-	HeartbeatEnabled bool   `json:"heartbeatEnabled" jsonschema:"heartbeat checks run against the target"`
+	HeartbeatEnabled bool   `json:"heartbeatEnabled" jsonschema:"heartbeat checks run against the target. For a heartbeat-capable type, false can mean it's opted out OR that the target isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key. Fix that, then turn it on with sneakers_set_secret_automation; turning it on before then is refused, naming what's missing"`
 
 	LastRotationResult  string `json:"lastRotationResult,omitempty" jsonschema:"last rotation outcome: OK, FAILED, DEGRADED or ROTATING"`
 	RotatedAt           string `json:"rotatedAt,omitempty" jsonschema:"RFC3339 time of the last successful rotation"`
