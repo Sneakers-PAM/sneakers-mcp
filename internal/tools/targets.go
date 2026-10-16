@@ -193,7 +193,7 @@ type saveTargetIn struct {
 	Realm        string   `json:"realm,omitempty" jsonschema:"Kerberos realm, usually the domain upper-cased"`
 	ConnectionID string   `json:"connectionId" jsonschema:"from sneakers_list_connections"`
 	Description  string   `json:"description,omitempty"`
-	HostKeys     []string `json:"hostKeys,omitempty" jsonschema:"the target's SSH host keys, one OpenSSH public key per entry (a line of the host's /etc/ssh/ssh_host_*_key.pub); the whole list. Omit to keep the current pins, [] to clear. Only a site admin may change them"`
+	HostKeys     []string `json:"hostKeys,omitempty" jsonschema:"the target's SSH host keys, one OpenSSH public key per entry (a line of the host's /etc/ssh/ssh_host_*_key.pub); the whole list. Omit to keep the current pins. No token can set or clear them, not even a site admin's: sending this is refused; a person pins them in the admin app (Targets -> Scan and pin)"`
 }
 type saveTargetOut struct {
 	Target targetOut `json:"target"`
@@ -271,7 +271,9 @@ func registerTargetTools(s *mcp.Server, t *toolset) {
 		Description: "Create a target, or update one of your own. A new target is personal to you; shared targets are " +
 			"published by admins. When you store an account that belongs to a system, create or find its target and " +
 			"attach it with sneakers_set_secret_target instead of leaving the secret without one. hostKeys pins the " +
-			"host's SSH host keys (site admins only); without pins the SSH broker refuses to connect to the target.",
+			"host's SSH host keys, but no token can change them -- not through this tool, even with a site-admin " +
+			"account; a person pins them in the admin app (Targets -> Scan and pin). Without pins the SSH broker " +
+			"refuses to connect to the target.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
 	}, t.saveTarget)
 	mcp.AddTool(s, &mcp.Tool{

@@ -67,10 +67,10 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_rename_secret` | write | The name only; values are never read or returned. |
 | `sneakers_create_folder` | write | A folder under a parent the caller can author; never at the top level or inside a personal tree. |
 | `sneakers_rename_folder` | write | A folder the caller can author, including in their own personal tree. |
-| `sneakers_set_secret_automation` | write | Turns rotation and heartbeat off or on; both flags are set on every call. |
+| `sneakers_set_secret_automation` | write | Turns rotation and heartbeat off or on; both flags are set on every call. Turning heartbeat back on is refused, naming what's missing, unless the secret has a target with a connection and, for SSH Key, a pinned host key. |
 | `sneakers_list_connections` | read | The connection profiles (protocol, port, TLS) a target can bind to. |
 | `sneakers_list_targets` | read | Shared targets and the caller's own, each with `hostKeyFingerprints`: the SHA256 fingerprints of its pinned SSH host keys. |
-| `sneakers_save_target` | write | Creates a personal target, or updates one of the caller's own. The hostname is validated first. `hostKeys` pins its SSH host keys (site admins only). |
+| `sneakers_save_target` | write | Creates a personal target, or updates one of the caller's own. The hostname is validated first. `hostKeys` pins its SSH host keys, but no token can set or clear them, not even a site admin's; a person pins them in the admin app (Targets → Scan and pin). |
 | `sneakers_set_secret_target` | write | Attaches or detaches a secret's target. |
 | `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason) or unreachable, never a value. |
 
@@ -142,7 +142,9 @@ accounts and personal tokens alike).
 
 ### Checking a credential
 
-`sneakers_test_secret` needs a heartbeat-capable type with a target. It asks for a check, then polls
+`sneakers_test_secret` needs a heartbeat-capable type with a target whose heartbeat is actually
+running — for an SSH Key secret, the target also needs a pinned host key; `heartbeatEnabled` on
+the secret says whether it is. It asks for a check, then polls
 the status every 2 seconds for up to 45 seconds and returns the first result newer than the
 request; after that it reports the check as pending. The vault allows one check a minute per
 secret: when it refuses with `ResourceExhausted`, the tool returns the latest result instead. When
@@ -155,8 +157,10 @@ The SSH broker connects only to a host that presents one of its target's pinned 
 refuses a target with none. `sneakers_save_target` takes `hostKeys`, the whole pin list: one
 OpenSSH public key per entry, the line from the host's `/etc/ssh/ssh_host_ed25519_key.pub` (or
 another `ssh_host_*_key.pub`). Leave it out to keep the target's current pins, send `[]` to clear
-them. The vault checks every key and lets only a human site admin change the pins, so a token gets
-`PermissionDenied` when it sends a different list. Before the call leaves the MCP server, more than
+them. The vault checks every key and lets only a human site admin change the pins; no token can,
+not even a site admin's, because pinning decides which server a credential may be sent to, which
+stays with a person on purpose. A token that sends a different list gets `PermissionDenied` saying
+so, not a missing-role message. Before the call leaves the MCP server, more than
 16 keys, an empty or over-long entry, or a private key is refused, and the error names the entry
 by position only. Results show pins as `hostKeyFingerprints` (as `ssh-keygen -l` prints them),
 never the keys; an empty list means the target isn't pinned.
@@ -234,6 +238,12 @@ re-fetch and re-scan when it differs from the one you read), `valueChangedAt`,
 `rotationEnabled`, `rotatesOnCheckin` (checking the secret in after a
 check-out rotates the value), `heartbeatEnabled`, and the last rotation and
 heartbeat results. None carry a value.
+
+`heartbeatEnabled` false on a heartbeat-capable type can mean it's opted out, or that the target
+isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key — a new secret's
+heartbeat starts off until that's true, rather than failing checks from the first poll. Fix what's
+missing, then turn it on with `sneakers_set_secret_automation`; asking before then is refused,
+naming what's still missing.
 
 - `sneakers_find_secrets` takes `changedSince` (RFC3339) to list only secrets
   whose value changed at or after that time; a bad time is refused before the
