@@ -53,6 +53,9 @@ type SecretSummary struct {
 	FolderID string  `json:"folderId"`
 	TypeID   string  `json:"typeId"`
 	TargetID *string `json:"targetId,omitempty"`
+	// TargetIDs lists every attached target, in attach order; TargetID stays
+	// the first/primary entry.
+	TargetIDs []string `json:"targetIds"`
 
 	RotationOptOut  bool `json:"rotationOptOut"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut"`
@@ -97,7 +100,7 @@ const placementFields = ` placement{folderId requestedFolderId rule reason}`
 
 // summaryFields is the selection every SecretSummary result uses, so no
 // operation drops a field the others return.
-const summaryFields = `id name folderId typeId targetId rotationOptOut heartbeatOptOut ` +
+const summaryFields = `id name folderId typeId targetId targetIds rotationOptOut heartbeatOptOut ` +
 	`heartbeatBlockedReason valueVersion valueChangedAt rotationEnabled rotatesOnCheckin ` +
 	`heartbeatEnabled lastRotationResult rotatedAt nextRotationAt lastHeartbeatResult`
 
@@ -679,12 +682,81 @@ const setSecretTargetMutation = `mutation SetTarget($secretId:ID!,$targetId:ID){
 }`
 
 // SetSecretTarget attaches targetID to a secret, or detaches its target when
-// targetID is empty.
+// targetID is empty. Replace semantics: the whole target list becomes just
+// this one.
 func (c *Client) SetSecretTarget(ctx context.Context, token, secretID, targetID string) (SecretSummary, error) {
 	var out struct {
 		Secret SecretSummary `json:"setSecretTargetForPrincipal"`
 	}
 	err := c.do(ctx, token, setSecretTargetMutation, map[string]any{"secretId": secretID, "targetId": nilIfEmpty(targetID)}, &out)
+	return out.Secret, err
+}
+
+const attachSecretTargetMutation = `mutation Attach($secretId:ID!,$targetId:ID!){
+  attachSecretTargetForPrincipal(secretId:$secretId,targetId:$targetId){` + summaryFields + `}
+}`
+
+// AttachSecretTarget adds targetID to a secret's target list, without
+// touching the others.
+func (c *Client) AttachSecretTarget(ctx context.Context, token, secretID, targetID string) (SecretSummary, error) {
+	var out struct {
+		Secret SecretSummary `json:"attachSecretTargetForPrincipal"`
+	}
+	err := c.do(ctx, token, attachSecretTargetMutation, map[string]any{"secretId": secretID, "targetId": targetID}, &out)
+	return out.Secret, err
+}
+
+const detachSecretTargetMutation = `mutation Detach($secretId:ID!,$targetId:ID!){
+  detachSecretTargetForPrincipal(secretId:$secretId,targetId:$targetId){` + summaryFields + `}
+}`
+
+// DetachSecretTarget removes targetID from a secret's target list, without
+// touching the others. A no-op, not an error, if it wasn't attached.
+func (c *Client) DetachSecretTarget(ctx context.Context, token, secretID, targetID string) (SecretSummary, error) {
+	var out struct {
+		Secret SecretSummary `json:"detachSecretTargetForPrincipal"`
+	}
+	err := c.do(ctx, token, detachSecretTargetMutation, map[string]any{"secretId": secretID, "targetId": targetID}, &out)
+	return out.Secret, err
+}
+
+const rotateSecretMutation = `mutation Rotate($secretId:ID!,$policyId:ID){
+  rotateSecretForPrincipal(secretId:$secretId,policyId:$policyId){ secret{` + summaryFields + `} newValue }
+}`
+
+// RotateSecret regenerates the type's password field under its policy (or
+// the override named by policyID) and stores it as a new version. The new
+// value is always returned: the caller's reason to rotate (e.g. a
+// local-admin-password broker) is to push it to the target next, store then
+// set.
+func (c *Client) RotateSecret(ctx context.Context, token, secretID, policyID string) (SecretSummary, string, error) {
+	var out struct {
+		Rotated *struct {
+			Secret   SecretSummary `json:"secret"`
+			NewValue string        `json:"newValue"`
+		} `json:"rotateSecretForPrincipal"`
+	}
+	err := c.do(ctx, token, rotateSecretMutation, map[string]any{"secretId": secretID, "policyId": nilIfEmpty(policyID)}, &out)
+	if err != nil {
+		return SecretSummary{}, "", err
+	}
+	if out.Rotated == nil {
+		return SecretSummary{}, "", errors.New("gateway returned no secret")
+	}
+	return out.Rotated.Secret, out.Rotated.NewValue, nil
+}
+
+const restoreSecretVersionMutation = `mutation Restore($secretId:ID!,$versionNo:Int!){
+  restoreSecretVersionForPrincipal(secretId:$secretId,versionNo:$versionNo){` + summaryFields + `}
+}`
+
+// RestoreSecretVersion makes a prior version current again, as a new
+// version — never a history rewrite.
+func (c *Client) RestoreSecretVersion(ctx context.Context, token, secretID string, versionNo int) (SecretSummary, error) {
+	var out struct {
+		Secret SecretSummary `json:"restoreSecretVersionForPrincipal"`
+	}
+	err := c.do(ctx, token, restoreSecretVersionMutation, map[string]any{"secretId": secretID, "versionNo": versionNo}, &out)
 	return out.Secret, err
 }
 

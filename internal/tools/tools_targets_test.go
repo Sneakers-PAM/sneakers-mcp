@@ -61,3 +61,22 @@ func TestTargetToolDenialsSurfaceAsToolErrors(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestAttachDetachSecretTargetTools proves attach/detach forward the secret
+// and target ids straight through, carrying back the full targetIds list
+// (unlike setSecretTarget's replace semantics).
+func TestAttachDetachSecretTargetTools(t *testing.T) {
+	gw := fakeGateway(t, `{"data":{"attachSecretTargetForPrincipal":{"id":"s1","name":"claude ssh key","folderId":"f","typeId":"t","targetId":"t1","targetIds":["t1","t2"]}}}`)
+	_, out, err := newTools(gw.URL, nil).attachSecretTarget(context.Background(), callReq("Bearer t"), attachSecretTargetIn{SecretID: "s1", TargetID: "t2"})
+	vars, _ := gw.vars.Load().(map[string]any)
+	if err != nil || out.Secret.ID != "s1" || vars["targetId"] != "t2" || len(out.Secret.TargetIDs) != 2 {
+		t.Fatalf("attach: out=%+v err=%v vars=%#v", out, err, vars)
+	}
+
+	gw2 := fakeGateway(t, `{"data":{"detachSecretTargetForPrincipal":{"id":"s1","name":"claude ssh key","folderId":"f","typeId":"t","targetId":"t1","targetIds":["t1"]}}}`)
+	_, dout, err := newTools(gw2.URL, nil).detachSecretTarget(context.Background(), callReq("Bearer t"), detachSecretTargetIn{SecretID: "s1", TargetID: "t2"})
+	vars2, _ := gw2.vars.Load().(map[string]any)
+	if err != nil || dout.Secret.ID != "s1" || vars2["targetId"] != "t2" || len(dout.Secret.TargetIDs) != 1 {
+		t.Fatalf("detach: out=%+v err=%v vars=%#v", dout, err, vars2)
+	}
+}
