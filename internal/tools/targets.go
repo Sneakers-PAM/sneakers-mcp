@@ -18,10 +18,12 @@ import (
 )
 
 const (
-	toolConnections = "sneakers_list_connections"
-	toolTargets     = "sneakers_list_targets"
-	toolSaveTarget  = "sneakers_save_target"
-	toolSetTarget   = "sneakers_set_secret_target"
+	toolConnections  = "sneakers_list_connections"
+	toolTargets      = "sneakers_list_targets"
+	toolSaveTarget   = "sneakers_save_target"
+	toolSetTarget    = "sneakers_set_secret_target"
+	toolAttachTarget = "sneakers_attach_secret_target"
+	toolDetachTarget = "sneakers_detach_secret_target"
 
 	maxHostnameLen = 253
 	maxDescLen     = 1024
@@ -253,6 +255,58 @@ func (t *toolset) setSecretTarget(ctx context.Context, req *mcp.CallToolRequest,
 	return nil, out, nil
 }
 
+// --- sneakers_attach_secret_target / sneakers_detach_secret_target --------
+
+type attachSecretTargetIn struct {
+	SecretID string `json:"secretId"`
+	TargetID string `json:"targetId"`
+}
+type attachSecretTargetOut struct {
+	Secret secretSummary `json:"secret"`
+}
+
+func (t *toolset) attachSecretTarget(ctx context.Context, req *mcp.CallToolRequest, in attachSecretTargetIn) (*mcp.CallToolResult, attachSecretTargetOut, error) {
+	var out attachSecretTargetOut
+	err := t.run(req, toolAttachTarget,
+		func() error {
+			return checkAll(checkLen("secretId", in.SecretID, maxIDLen, true), checkLen("targetId", in.TargetID, maxIDLen, true))
+		},
+		func(token string) error {
+			s, err := t.gw.AttachSecretTarget(ctx, token, in.SecretID, in.TargetID)
+			out.Secret = summaryOf(s)
+			return err
+		})
+	if err != nil {
+		return nil, attachSecretTargetOut{}, err
+	}
+	return nil, out, nil
+}
+
+type detachSecretTargetIn struct {
+	SecretID string `json:"secretId"`
+	TargetID string `json:"targetId"`
+}
+type detachSecretTargetOut struct {
+	Secret secretSummary `json:"secret"`
+}
+
+func (t *toolset) detachSecretTarget(ctx context.Context, req *mcp.CallToolRequest, in detachSecretTargetIn) (*mcp.CallToolResult, detachSecretTargetOut, error) {
+	var out detachSecretTargetOut
+	err := t.run(req, toolDetachTarget,
+		func() error {
+			return checkAll(checkLen("secretId", in.SecretID, maxIDLen, true), checkLen("targetId", in.TargetID, maxIDLen, true))
+		},
+		func(token string) error {
+			s, err := t.gw.DetachSecretTarget(ctx, token, in.SecretID, in.TargetID)
+			out.Secret = summaryOf(s)
+			return err
+		})
+	if err != nil {
+		return nil, detachSecretTargetOut{}, err
+	}
+	return nil, out, nil
+}
+
 func registerTargetTools(s *mcp.Server, t *toolset) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        toolConnections,
@@ -277,8 +331,22 @@ func registerTargetTools(s *mcp.Server, t *toolset) {
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
 	}, t.saveTarget)
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        toolSetTarget,
-		Description: "Attach a target to a secret you can author, or detach it by omitting targetId. The target must be shared or your own.",
+		Name: toolSetTarget,
+		Description: "Replace a secret's whole target list with one target, or clear it by omitting targetId. One secret can be " +
+			"attached to several targets (one SSH key opening sessions on every host it's attached to): use " +
+			"sneakers_attach_secret_target/sneakers_detach_secret_target instead to add or remove one without replacing the list. " +
+			"The target must be shared or your own.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), IdempotentHint: true, OpenWorldHint: ptr(false)},
 	}, t.setSecretTarget)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: toolAttachTarget,
+		Description: "Attach a target to a secret you can author, without touching its other targets (one secret can open " +
+			"sessions on several pinned targets). The target must be shared or your own. A no-op if already attached.",
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), IdempotentHint: true, OpenWorldHint: ptr(false)},
+	}, t.attachSecretTarget)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        toolDetachTarget,
+		Description: "Detach one target from a secret you can author, without touching its other targets. A no-op if it isn't attached.",
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), IdempotentHint: true, OpenWorldHint: ptr(false)},
+	}, t.detachSecretTarget)
 }

@@ -53,6 +53,9 @@ type SecretSummary struct {
 	FolderID string  `json:"folderId"`
 	TypeID   string  `json:"typeId"`
 	TargetID *string `json:"targetId,omitempty"`
+	// TargetIDs lists every attached target, in attach order; TargetID stays
+	// the first/primary entry.
+	TargetIDs []string `json:"targetIds"`
 
 	RotationOptOut  bool `json:"rotationOptOut"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut"`
@@ -97,7 +100,7 @@ const placementFields = ` placement{folderId requestedFolderId rule reason}`
 
 // summaryFields is the selection every SecretSummary result uses, so no
 // operation drops a field the others return.
-const summaryFields = `id name folderId typeId targetId rotationOptOut heartbeatOptOut ` +
+const summaryFields = `id name folderId typeId targetId targetIds rotationOptOut heartbeatOptOut ` +
 	`heartbeatBlockedReason valueVersion valueChangedAt rotationEnabled rotatesOnCheckin ` +
 	`heartbeatEnabled lastRotationResult rotatedAt nextRotationAt lastHeartbeatResult`
 
@@ -679,12 +682,41 @@ const setSecretTargetMutation = `mutation SetTarget($secretId:ID!,$targetId:ID){
 }`
 
 // SetSecretTarget attaches targetID to a secret, or detaches its target when
-// targetID is empty.
+// targetID is empty. Replace semantics: the whole target list becomes just
+// this one.
 func (c *Client) SetSecretTarget(ctx context.Context, token, secretID, targetID string) (SecretSummary, error) {
 	var out struct {
 		Secret SecretSummary `json:"setSecretTargetForPrincipal"`
 	}
 	err := c.do(ctx, token, setSecretTargetMutation, map[string]any{"secretId": secretID, "targetId": nilIfEmpty(targetID)}, &out)
+	return out.Secret, err
+}
+
+const attachSecretTargetMutation = `mutation Attach($secretId:ID!,$targetId:ID!){
+  attachSecretTargetForPrincipal(secretId:$secretId,targetId:$targetId){` + summaryFields + `}
+}`
+
+// AttachSecretTarget adds targetID to a secret's target list, without
+// touching the others.
+func (c *Client) AttachSecretTarget(ctx context.Context, token, secretID, targetID string) (SecretSummary, error) {
+	var out struct {
+		Secret SecretSummary `json:"attachSecretTargetForPrincipal"`
+	}
+	err := c.do(ctx, token, attachSecretTargetMutation, map[string]any{"secretId": secretID, "targetId": targetID}, &out)
+	return out.Secret, err
+}
+
+const detachSecretTargetMutation = `mutation Detach($secretId:ID!,$targetId:ID!){
+  detachSecretTargetForPrincipal(secretId:$secretId,targetId:$targetId){` + summaryFields + `}
+}`
+
+// DetachSecretTarget removes targetID from a secret's target list, without
+// touching the others. A no-op, not an error, if it wasn't attached.
+func (c *Client) DetachSecretTarget(ctx context.Context, token, secretID, targetID string) (SecretSummary, error) {
+	var out struct {
+		Secret SecretSummary `json:"detachSecretTargetForPrincipal"`
+	}
+	err := c.do(ctx, token, detachSecretTargetMutation, map[string]any{"secretId": secretID, "targetId": targetID}, &out)
 	return out.Secret, err
 }
 

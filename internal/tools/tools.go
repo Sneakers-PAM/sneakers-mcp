@@ -185,6 +185,9 @@ type secretSummary struct {
 	FolderID string `json:"folderId"`
 	TypeID   string `json:"typeId"`
 	TargetID string `json:"targetId,omitempty"`
+	// Every attached target, in attach order; TargetID stays the first/
+	// primary entry.
+	TargetIDs []string `json:"targetIds"`
 
 	RotationOptOut  bool `json:"rotationOptOut" jsonschema:"rotation is turned off for this secret"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut" jsonschema:"heartbeat checks are turned off for this secret"`
@@ -204,6 +207,7 @@ type secretSummary struct {
 
 func summaryOf(s gwclient.SecretSummary) secretSummary {
 	out := secretSummary{ID: s.ID, Name: s.Name, FolderID: s.FolderID, TypeID: s.TypeID,
+		TargetIDs:      append([]string{}, s.TargetIDs...),
 		RotationOptOut: s.RotationOptOut, HeartbeatOptOut: s.HeartbeatOptOut,
 		ValueVersion: s.ValueVersion, ValueChangedAt: strOf(s.ValueChangedAt),
 		RotationEnabled: s.RotationEnabled, RotatesOnCheckin: s.RotatesOnCheckin, HeartbeatEnabled: s.HeartbeatEnabled,
