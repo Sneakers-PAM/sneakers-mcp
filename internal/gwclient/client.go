@@ -57,6 +57,12 @@ type SecretSummary struct {
 	RotationOptOut  bool `json:"rotationOptOut"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut"`
 
+	// Why heartbeat isn't enabled yet, for a heartbeat-capable type: no
+	// target, no connection, or (SSH Key only) no pinned host key. Nil once
+	// HeartbeatEnabled is true, when it's opted out on purpose, or when the
+	// type has no heartbeat at all.
+	HeartbeatBlockedReason *string `json:"heartbeatBlockedReason,omitempty"`
+
 	// Placement is set on a create or generate only.
 	Placement *Placement `json:"placement,omitempty"`
 
@@ -92,8 +98,8 @@ const placementFields = ` placement{folderId requestedFolderId rule reason}`
 // summaryFields is the selection every SecretSummary result uses, so no
 // operation drops a field the others return.
 const summaryFields = `id name folderId typeId targetId rotationOptOut heartbeatOptOut ` +
-	`valueVersion valueChangedAt rotationEnabled rotatesOnCheckin heartbeatEnabled ` +
-	`lastRotationResult rotatedAt nextRotationAt lastHeartbeatResult`
+	`heartbeatBlockedReason valueVersion valueChangedAt rotationEnabled rotatesOnCheckin ` +
+	`heartbeatEnabled lastRotationResult rotatedAt nextRotationAt lastHeartbeatResult`
 
 // Automation opts a new secret out of rotation and/or heartbeat, so a
 // credential that must never rotate never gets a schedule. KeepFolder opts
@@ -427,7 +433,7 @@ type Mapping struct {
 
 const changeTypeQuery = `mutation ChangeType($id:ID!,$newTypeId:ID!,$fieldMapping:[FieldMappingInput!],$fields:[SecretFieldInput!]){
   changeSecretTypeForPrincipal(id:$id,newTypeId:$newTypeId,fieldMapping:$fieldMapping,fields:$fields){
-    secret{` + summaryFields + `} fieldKeys movedToNotesKeys automation{rotation heartbeat target}
+    secret{` + summaryFields + `} fieldKeys movedToNotesKeys automation{rotation heartbeat target} changeLabel
   }
 }`
 
@@ -447,6 +453,11 @@ type TypeChange struct {
 	// type's notes field.
 	MovedToNotesKeys []string             `json:"movedToNotesKeys"`
 	Automation       TypeChangeAutomation `json:"automation"`
+	// ChangeLabel describes the change itself (old type name -> new type
+	// name, fields added, renamed and carried over), the same text recorded
+	// on the new version (SecretVersion.changeLabel). Nil for a change the
+	// gateway's value rules didn't produce a version label for.
+	ChangeLabel *string `json:"changeLabel,omitempty"`
 }
 
 // ChangeSecretType changes a secret's type, re-keying its stored values per

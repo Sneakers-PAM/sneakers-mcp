@@ -695,6 +695,7 @@ type changeSecretTypeOut struct {
 	FieldKeys        []string      `json:"fieldKeys"`
 	MovedToNotesKeys []string      `json:"movedToNotesKeys" jsonschema:"old field keys whose values had no field in the new type and were appended to its notes field (keys only)"`
 	Automation       retypeAutoOut `json:"automation"`
+	ChangeLabel      string        `json:"changeLabel,omitempty" jsonschema:"describes the change itself: old type name -> new type name, fields added, renamed and carried over. The same text a person sees against this version in the secret's history on the web"`
 }
 
 type retypeAutoOut struct {
@@ -770,7 +771,7 @@ func (t *toolset) changeSecretType(ctx context.Context, req *mcp.CallToolRequest
 				a := res.Automation
 				out = changeSecretTypeOut{Secret: summaryOf(*res.Secret), FieldKeys: res.FieldKeys, MovedToNotesKeys: res.MovedToNotesKeys, Automation: retypeAutoOut{
 					Rotation: a.Rotation, Heartbeat: a.Heartbeat, Target: a.Target, Note: retypeNote(a),
-				}}
+				}, ChangeLabel: strOf(res.ChangeLabel)}
 			}
 			return err
 		})
