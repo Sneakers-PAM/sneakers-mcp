@@ -101,7 +101,7 @@ func TestRunRefusesACommandOtherThanTheOneApproved(t *testing.T) {
 
 func TestRunFileInjectionUsesAPrivateTempFileAndRemovesIt(t *testing.T) {
 	gw := &fakeGateway{states: []string{"APPROVED"}, value: "hunter2"}
-	o, out, errb := opts("sh", "-c", `stat -c %a "$1"; cat "$1"; echo; echo "$1" >&2`, "sh", FilePlaceholder)
+	o, out, errb := opts("sh", "-c", `if stat -c %a / >/dev/null 2>&1; then stat -c %a "$1"; else stat -f %Lp "$1"; fi; cat "$1"; echo; echo "$1" >&2`, "sh", FilePlaceholder)
 	o.Inject = InjectFile
 	code, err := Run(context.Background(), gw, o)
 	if err != nil || code != 0 {

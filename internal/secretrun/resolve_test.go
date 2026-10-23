@@ -12,26 +12,41 @@ import (
 	"testing"
 )
 
+// trustedHasher returns a SHA-256 command whose program is on TrustedPath:
+// sha256sum where it is (Linux), shasum -a 256 otherwise (macOS keeps
+// sha256sum in /sbin, outside TrustedPath).
+func trustedHasher(t *testing.T) []string {
+	t.Helper()
+	for _, argv := range [][]string{{"sha256sum"}, {"shasum", "-a", "256"}} {
+		if _, err := resolveProgram(argv[0]); err == nil {
+			return argv
+		}
+	}
+	t.Fatalf("neither sha256sum nor shasum is in %v", TrustedPath)
+	return nil
+}
+
 func TestRunIgnoresAShadowBinaryEarlierOnTheCallersPath(t *testing.T) {
+	argv := trustedHasher(t)
 	shadow := t.TempDir()
 	marker := filepath.Join(t.TempDir(), "leaked")
 	script := "#!/bin/sh\ncat > " + marker + "\n"
-	if err := os.WriteFile(filepath.Join(shadow, "sha256sum"), []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(shadow, argv[0]), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", shadow+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	gw := &fakeGateway{states: []string{"APPROVED"}, value: "hunter2"}
-	o, out, errb := opts("sha256sum")
+	o, out, errb := opts(argv...)
 	code, err := Run(context.Background(), gw, o)
 	if err != nil || code != 0 {
 		t.Fatalf("code=%d err=%v stderr=%q", code, err, errb.String())
 	}
 	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
-		t.Fatal("the shadow sha256sum on $PATH received the secret")
+		t.Fatalf("the shadow %s on $PATH received the secret", argv[0])
 	}
 	if !strings.Contains(out.String(), "  -") {
-		t.Fatalf("trusted sha256sum did not run: stdout=%q", out.String())
+		t.Fatalf("trusted %s did not run: stdout=%q", argv[0], out.String())
 	}
 }
 
