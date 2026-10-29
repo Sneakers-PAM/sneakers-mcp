@@ -82,7 +82,7 @@ Names may not contain `/`, because folder paths are joined with it.
 
 ### Reveals that need approval
 
-After `/login`, a personal token gets no second factor and no approval for a secret its user can
+Once signed in, a personal token gets no second factor and no approval for a secret its user can
 read. The one exception is a secret with an approval level, decided by the vault:
 
 | Requester | Normal | Approval-required | Always-approve |
@@ -197,7 +197,8 @@ fails. Both are refused while a scheduled rotation of the secret is already queu
 ### A static token
 
 Mint a service-account API token with the gateway's `mintApiToken` (an admin action; the token is
-shown once), or use your own personal token from `/login`. Then give the MCP client the URL and a
+shown once). A person's own token comes from an OAuth sign-in (below, or `sneakers-put login`,
+which keeps it in the macOS Keychain); no page shows one to copy. Then give the MCP client the URL and a
 static `Authorization` header. Most clients take a JSON config of this shape:
 
 ```json
