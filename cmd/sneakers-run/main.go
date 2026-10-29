@@ -8,8 +8,9 @@
 // task once, when nobody else can) for a secret with an approval level. It is
 // masked in the command's output.
 //
-//	SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_... \
-//	  sneakers-run -secret <id> [-field password] [-inject stdin|file] [-run-id <id>] [-purpose <text>] [-no-open] -- <command> [args...]
+//	export SNEAKERS_URL=https://sneakers.example.org
+//	sneakers-run login
+//	sneakers-run -secret <id> [-field password] [-inject stdin|file] [-run-id <id>] [-purpose <text>] [-no-open] -- <command> [args...]
 package main
 
 import (
@@ -29,6 +30,10 @@ import (
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/secretrun"
 )
 
+// tokenStore is where `login` keeps the personal token (the macOS
+// Keychain); the tests replace it.
+var tokenStore = cliauth.DefaultStore()
+
 // runIDEnv names the run id when -run-id isn't given.
 const runIDEnv = "SNEAKERS_RUN_ID"
 
@@ -38,7 +43,7 @@ type config struct {
 	opts     secretrun.Options
 }
 
-const usageText = `sneakers-run runs one command with a Sneakers secret field supplied to it on
+var usageText = `sneakers-run runs one command with a Sneakers secret field supplied to it on
 stdin or in a private temp file. The gateway releases the value for this exact
 command only: at once for a secret you can read, or, for a secret with an
 approval level, after an owner or approver approves it (or you confirm the
@@ -46,7 +51,7 @@ task once, when nobody else can). The value is masked in the command's output.
 
 Usage:
   sneakers-run -secret <secret id> [flags] -- <command> [args...]
-
+` + cliauth.LoginUsage("sneakers-run") + `
 Flags:
   -secret <id>          id of the secret to use (required)
   -field <key>          field of the secret to supply (default: password)
@@ -67,14 +72,15 @@ Everything after -- is the command, run exactly as given.
 
 Environment:
   SNEAKERS_URL     Sneakers base URL; must be https://
-  SNEAKERS_TOKEN   your personal token from /login (snk_u_...); not passed
-                   to the command
+  SNEAKERS_TOKEN   a personal token (snk_u_...) to use instead of the one
+                   sneakers-run login stored; not passed to the command
   SNEAKERS_RUN_ID  run id used when -run-id isn't given ([A-Za-z0-9_-],
                    at most 64 characters)
-  BROWSER          browser used to open the approval page (else xdg-open
-                   or open)
+  BROWSER          browser used to open the approval page and the sign-in
+                   (else xdg-open or open)
 
 Examples:
+  sneakers-run login
   sneakers-run -secret <secret id> -- ssh admin@router-01
   sneakers-run -inject file -secret <secret id> -- tool --key {secret_file}
   SNEAKERS_RUN_ID=run_deploy1 sneakers-run -purpose "deploy the app" -secret <secret id> -- tool
@@ -106,7 +112,7 @@ func parse(args []string, getenv func(string) string) (config, error) {
 		return config{}, err
 	}
 	secret, field, inject, label, insecureLocal, noOpen := f.secret, f.field, f.inject, f.label, f.insecureLocal, f.noOpen
-	endpoint, token, err := cliauth.FromEnv(getenv, *insecureLocal)
+	endpoint, token, err := cliauth.Resolve(getenv, *insecureLocal, tokenStore)
 	switch {
 	case err != nil:
 		return config{}, err
@@ -148,6 +154,14 @@ func opener(c config, getenv func(string) string, lookPath func(string) (string,
 }
 
 func run(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
+	if cliauth.IsAuth(args) {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cliauth.RunAuth(ctx, cliauth.Session{
+			Prog: "sneakers-run", Getenv: getenv, Store: tokenStore, Stdout: stdout, Stderr: stderr, HostName: cliauth.HostName,
+			Opener: func() func(string) { return secretrun.StartOpener(secretrun.FindOpener(getenv, exec.LookPath)) },
+		}, args)
+	}
 	c, err := parse(args, getenv)
 	if errors.Is(err, flag.ErrHelp) {
 		_, _ = io.WriteString(stdout, usageText)

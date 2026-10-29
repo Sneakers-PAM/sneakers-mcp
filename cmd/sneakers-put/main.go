@@ -5,8 +5,9 @@
 // existing one, reading values from files or stdin on this machine, so a
 // value never passes through an agent session or the shell history.
 //
-//	SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_... \
-//	  sneakers-put -folder <id> -type <id> -name <name> -field password=@pw.txt -field username=svc
+//	export SNEAKERS_URL=https://sneakers.example.org
+//	sneakers-put login
+//	sneakers-put -folder <id> -type <id> -name <name> -field password=@pw.txt -field username=svc
 //	sneakers-put -id <secret id> -field password=-
 package main
 
@@ -17,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -24,7 +26,12 @@ import (
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/cliauth"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/gwclient"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/secretput"
+	"github.com/Sneakers-PAM/sneakers-mcp/internal/secretrun"
 )
+
+// tokenStore is where `login` keeps the personal token (the macOS
+// Keychain); the tests replace it.
+var tokenStore = cliauth.DefaultStore()
 
 type config struct {
 	endpoint string
@@ -38,14 +45,14 @@ type rawFields []string
 func (r *rawFields) String() string     { return "" }
 func (r *rawFields) Set(v string) error { *r = append(*r, v); return nil }
 
-const usageText = `sneakers-put creates a Sneakers secret, or updates fields of an existing one,
+var usageText = `sneakers-put creates a Sneakers secret, or updates fields of an existing one,
 with values read from files or stdin, so a value never passes through an
 agent session or the shell history.
 
 Usage:
   sneakers-put -folder <folder id> -type <type id> -name <name> [-disable-rotation] [-keep-folder] -field ... [-field ...]
   sneakers-put -id <secret id> -field ... [-field ...]
-
+` + cliauth.LoginUsage("sneakers-put") + `
 Create mode (-folder, -type, -name) makes a new secret. Update mode (-id)
 writes a new version of an existing secret with the fields given.
 
@@ -72,9 +79,12 @@ Field forms:
 
 Environment:
   SNEAKERS_URL     Sneakers base URL; must be https://
-  SNEAKERS_TOKEN   your personal token from /login (snk_u_...)
+  SNEAKERS_TOKEN   a personal token (snk_u_...) to use instead of the one
+                   sneakers-put login stored
+  BROWSER          browser login opens the sign-in in (else xdg-open or open)
 
 Examples:
+  sneakers-put login
   sneakers-put -folder <folder id> -type <type id> -name "router-01 admin" \
     -field username=admin -field password=@./router-01.pw
   sneakers-put -id <secret id> -field password=- < ./new.pw
@@ -112,7 +122,7 @@ func parse(args []string, getenv func(string) string) (config, error) {
 	if fs.NArg() > 0 {
 		return config{}, errors.New("unexpected arguments after the flags")
 	}
-	endpoint, token, err := cliauth.FromEnv(getenv, *f.insecureLocal)
+	endpoint, token, err := cliauth.Resolve(getenv, *f.insecureLocal, tokenStore)
 	if err != nil {
 		return config{}, err
 	}
@@ -150,6 +160,14 @@ func checkMode(id, folder, typ, name string, createOptions bool) error {
 }
 
 func run(args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if cliauth.IsAuth(args) {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cliauth.RunAuth(ctx, cliauth.Session{
+			Prog: "sneakers-put", Getenv: getenv, Store: tokenStore, Stdout: stdout, Stderr: stderr, HostName: cliauth.HostName,
+			Opener: func() func(string) { return secretrun.StartOpener(secretrun.FindOpener(getenv, exec.LookPath)) },
+		}, args)
+	}
 	c, err := parse(args, getenv)
 	if errors.Is(err, flag.ErrHelp) {
 		_, _ = io.WriteString(stdout, usageText)

@@ -7,7 +7,8 @@ your shell history. The MCP tools `sneakers_create_secret` and
 `sneakers_generate_secret` point agents here for that reason.
 
 ```sh
-export SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_...
+export SNEAKERS_URL=https://sneakers.example.org
+sneakers-put login   # once: sign in in your browser; the token goes to the Keychain
 
 # Create. The folder and type ids come from sneakers_list_folders and
 # sneakers_list_secret_types.
@@ -25,6 +26,34 @@ sneakers-put -id <secret id> -field password=@./new.pw
 `sneakers-put -h` prints the full usage (modes, flags, field forms,
 environment and examples) and exits 0. A usage error prints the error and
 the same usage to stderr and exits 2.
+
+## Signing in
+
+`sneakers-put login` (or `sneakers-run login`, which is the same) signs you in to `SNEAKERS_URL`
+in your browser and keeps the personal token it gets in the macOS Keychain, so you never copy a
+token:
+
+```sh
+export SNEAKERS_URL=https://sneakers.example.org
+sneakers-put login
+```
+
+It uses the gateway's OAuth sign-in for native clients, the one an MCP client uses: it registers a
+client with a loopback redirect URI, opens the gateway's sign-in and consent page (your second
+factor, and the consent naming `sneakers-put on <this host>`), takes the code on `127.0.0.1` with a
+PKCE `S256` check, and exchanges it for a personal token (`snk_u_...`). `-no-open` prints the link
+instead of opening a browser (`$BROWSER`, else `xdg-open` or `open`). The token goes into the login
+Keychain as a password item with the service `Sneakers-PAM` and the gateway host as the account,
+written through `security`'s standard input, never its command line. It's never printed.
+
+- Every later run reads the token from the Keychain for the gateway `SNEAKERS_URL` names.
+  `SNEAKERS_TOKEN`, when set, is used instead.
+- Run `login` again to replace the token. `sneakers-put logout` removes it from the Keychain;
+  revoke it on the Tokens page to end it on the gateway too.
+- The Keychain is macOS only. Elsewhere `login` refuses, and `SNEAKERS_TOKEN` must hold a personal
+  token.
+- The gateway records the token like an MCP client's (`client_kind: mcp`), so while MCP is turned
+  off on the appliance (the `mcp.enabled` setting), `login` and the token are refused.
 
 ## Fields
 
@@ -65,8 +94,8 @@ supplied from a file or stdin, that value is replaced with `[redacted]`.
 
 ## Rules
 
-- `SNEAKERS_TOKEN` must be a personal token from `/login` (`snk_u_...`).
-  Service-account tokens are refused.
+- The token is the one `sneakers-put login` stored, or `SNEAKERS_TOKEN`, and
+  must be a personal token (`snk_u_...`). Service-account tokens are refused.
 - `SNEAKERS_URL` must be `https://`. Plain `http://` is accepted only for
   localhost with `-insecure-localhost`, for testing against a local gateway.
 - Access is checked by the gateway and vault as for the UI: author rights on

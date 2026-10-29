@@ -4,7 +4,8 @@
 through the model or the shell history.
 
 ```sh
-export SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_...
+export SNEAKERS_URL=https://sneakers.example.org
+sneakers-run login                                               # once: the token goes to the Keychain
 sneakers-run -secret <id> -- ssh admin@router-01                 # value on stdin
 sneakers-run -secret <id> -inject file -- tool --key {secret_file}
 ```
@@ -15,7 +16,9 @@ couldn't be prepared, approved or redeemed.
 
 ## How the value reaches the command
 
-- It needs a personal token from `/login`. Service-account tokens are refused.
+- It needs a personal token: the one `sneakers-run login` (or `sneakers-put login`) stored in the
+  macOS Keychain, or `SNEAKERS_TOKEN`. Service-account tokens are refused. See
+  [sneakers-put.md](sneakers-put.md#signing-in) for how the sign-in works.
 - The use is bound to this exact argv. For a secret you can read it is approved at once. For a
   secret with an approval level (see [api.md](api.md#reveals-that-need-approval)) it waits for an
   owner or approver of the secret, never you; when nobody else can decide, you confirm the task
