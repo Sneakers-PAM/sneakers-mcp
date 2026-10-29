@@ -28,6 +28,9 @@ func TestLoginStoresTheTokenAndLogoutRemovesIt(t *testing.T) {
 	if code := cliauth.RunAuth(context.Background(), s, []string{"login", "-insecure-localhost"}); code != 0 {
 		t.Fatalf("login: %d %s", code, readSync(&stderr))
 	}
+	if l := g.landedOn(t); l.query.Get("client") != "sneakers-put" || l.query.Has("reason") {
+		t.Fatalf("landed on %q", l.query.Encode())
+	}
 	account, _ := cliauth.Account(g.srv.URL)
 	if store[account] != g.token || g.clientName != "sneakers-put on laptop-01" {
 		t.Fatalf("stored %v, client %q", store, g.clientName)

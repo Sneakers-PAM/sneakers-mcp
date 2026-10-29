@@ -27,6 +27,9 @@ type LoginOptions struct {
 	// ClientName is what the consent page shows the person, such as
 	// "sneakers-put on laptop-01".
 	ClientName string
+	// Command names the command signing in, such as "sneakers-put", on the
+	// Sneakers page the browser ends on.
+	Command string
 	// Open shows the sign-in page in a browser; nil only prints its link.
 	Open func(url string)
 	// Out is where the link and the progress go.
@@ -34,6 +37,10 @@ type LoginOptions struct {
 	// HTTP calls the gateway; nil means a client with a 30-second timeout.
 	HTTP *http.Client
 }
+
+// landingPath is the staff app's page the browser ends on: the loopback
+// listener serves no page of its own, it sends the browser there.
+const landingPath = "/cli/signed-in"
 
 // callbackPath is the loopback redirect URI's path. The gateway takes any
 // port on it, so each sign-in listens on a fresh one.
@@ -80,19 +87,30 @@ func Login(ctx context.Context, o LoginOptions) (string, error) {
 	if o.Open != nil {
 		o.Open(link)
 	}
-	code, err := callback(ctx, ln, state)
-	if err != nil {
-		return "", err
+	var token string
+	finish := func(code string) error {
+		t, err := exchange(ctx, hc, meta.Token, url.Values{
+			"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirect},
+			"client_id": {clientID}, "code_verifier": {verifier},
+		})
+		if err != nil {
+			return err
+		}
+		if !personalToken.MatchString(t) {
+			return errors.New("login: the gateway's answer isn't a personal token")
+		}
+		token = t
+		return nil
 	}
-	token, err := exchange(ctx, hc, meta.Token, url.Values{
-		"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirect},
-		"client_id": {clientID}, "code_verifier": {verifier},
-	})
-	if err != nil {
-		return "", err
+	land := func(reason string) string {
+		q := url.Values{"client": {o.Command}}
+		if reason != "" {
+			q.Set("reason", reason)
+		}
+		return o.Base + landingPath + "?" + q.Encode()
 	}
-	if !personalToken.MatchString(token) {
-		return "", errors.New("login: the gateway's answer isn't a personal token")
+	if err := callback(ctx, ln, state, finish, land); err != nil {
+		return "", err
 	}
 	return token, nil
 }
@@ -151,39 +169,36 @@ func register(ctx context.Context, hc *http.Client, endpoint, name string) (stri
 	return out.ClientID, nil
 }
 
-// callback waits for the browser's redirect to the loopback listener and
-// returns the code once its state is this sign-in's. A callback with
-// another state, or an error, ends the sign-in without an exchange.
-func callback(ctx context.Context, ln net.Listener, state string) (string, error) {
-	type result struct {
-		code string
-		err  error
-	}
-	got := make(chan result, 1)
+// callback waits for the browser's redirect to the loopback listener and,
+// once its state is this sign-in's, hands the code to finish. A callback
+// with another state, or an error, ends the sign-in without an exchange.
+// The browser waits for the outcome, then goes on to the Sneakers page
+// that land names, with the reason when it failed.
+func callback(ctx context.Context, ln net.Listener, state string, finish func(code string) error, land func(reason string) string) error {
+	got := make(chan error, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		var res result
+		var err error
+		reason := ""
 		switch {
 		case subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(state)) != 1:
-			res.err = errors.New("login: the sign-in came back with another state; start again")
+			err, reason = errors.New("login: the sign-in came back with another state; start again"), "state"
+		case q.Get("error") == "access_denied":
+			err, reason = errors.New("login: the sign-in was denied"), "denied"
 		case q.Get("error") != "":
-			res.err = fmt.Errorf("login: the sign-in wasn't approved (%s)", q.Get("error"))
+			err, reason = fmt.Errorf("login: the sign-in wasn't approved (%s)", q.Get("error")), "failed"
 		case q.Get("code") == "":
-			res.err = errors.New("login: the sign-in came back without a code")
+			err, reason = errors.New("login: the sign-in came back without a code"), "failed"
 		default:
-			res.code = q.Get("code")
+			if err = finish(q.Get("code")); err != nil {
+				reason = "exchange"
+			}
 		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		if res.err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = io.WriteString(w, "Sneakers sign-in failed. Go back to the terminal for the reason.\n")
-		} else {
-			_, _ = io.WriteString(w, "Signed in to Sneakers. You can close this tab and go back to the terminal.\n")
-		}
+		http.Redirect(w, r, land(reason), http.StatusSeeOther)
 		select {
-		case got <- res:
+		case got <- err:
 		default:
 		}
 	})
@@ -195,10 +210,10 @@ func callback(ctx context.Context, ln net.Listener, state string) (string, error
 		_ = srv.Shutdown(sctx)
 	}()
 	select {
-	case res := <-got:
-		return res.code, res.err
+	case err := <-got:
+		return err
 	case <-ctx.Done():
-		return "", fmt.Errorf("login: no sign-in came back: %w", ctx.Err())
+		return fmt.Errorf("login: no sign-in came back: %w", ctx.Err())
 	}
 }
 

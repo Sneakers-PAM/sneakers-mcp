@@ -41,7 +41,9 @@ sneakers-put login
 It uses the gateway's OAuth sign-in for native clients, the one an MCP client uses: it registers a
 client with a loopback redirect URI, opens the gateway's sign-in and consent page (your second
 factor, and the consent naming `sneakers-put on <this host>`), takes the code on `127.0.0.1` with a
-PKCE `S256` check, and exchanges it for a personal token (`snk_u_...`). `-no-open` prints the link
+PKCE `S256` check, and exchanges it for a personal token (`snk_u_...`). Once the exchange is done,
+the browser goes on to the Sneakers page `/cli/signed-in`, which says the command is signed in and as
+whom, or why it failed; the loopback listener serves no page of its own. `-no-open` prints the link
 instead of opening a browser (`$BROWSER`, else `xdg-open` or `open`). The token goes into the login
 Keychain as a password item with the service `Sneakers-PAM` and the gateway host as the account,
 written through `security`'s standard input, never its command line. It's never printed.
