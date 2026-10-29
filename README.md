@@ -48,11 +48,13 @@ go install github.com/Sneakers-PAM/sneakers-mcp/cmd/sneakers-run@latest
 go install github.com/Sneakers-PAM/sneakers-mcp/cmd/sneakers-put@latest
 ```
 
-Both need `SNEAKERS_URL` (your Sneakers base URL, `https://` only) and `SNEAKERS_TOKEN` (a personal
-token from `/login`, `snk_u_...`):
+Both need `SNEAKERS_URL` (your Sneakers base URL, `https://` only) and your personal token, which
+`login` gets by signing you in in the browser and keeps in the macOS Keychain (`SNEAKERS_TOKEN`
+overrides it):
 
 ```bash
-export SNEAKERS_URL=https://sneakers.example.org SNEAKERS_TOKEN=snk_u_...
+export SNEAKERS_URL=https://sneakers.example.org
+sneakers-put login
 sneakers-run -secret <id> -- ssh admin@router-01
 sneakers-put -id <secret id> -field password=@./new.pw
 ```

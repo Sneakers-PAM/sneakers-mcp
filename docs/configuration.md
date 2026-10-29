@@ -35,7 +35,7 @@ bare `401 invalid token`; the reason goes to the log, never to the caller.
 |---|---|---|
 | A JWT: three base64url segments, header `alg` = `RS256` | Ory Hydra: signature against the JWKS, `iss`, `aud` and `exp`, checked locally | `HYDRA_ISSUER` is set |
 | A service-account API token: exactly 43 characters of canonical unpadded base64url (32 bytes) | The gateway: `query{machineHealth machineWhoami{...}}` sent to `/machine/graphql` with the caller's bearer | `MCP_ACCEPT_API_TOKENS=true` |
-| A personal token: `snk_u_` followed by the same 43-character body, issued at `/login` | The same gateway check; the gateway acts as the token's owner with their live groups | `MCP_ACCEPT_API_TOKENS=true` |
+| A personal token: `snk_u_` followed by the same 43-character body, issued by the gateway's OAuth sign-in (an MCP client's, or `sneakers-put login`) | The same gateway check; the gateway acts as the token's owner with their live groups | `MCP_ACCEPT_API_TOKENS=true` |
 
 The MCP server can't verify an opaque token itself, so it asks the gateway before it handles any MCP
 request. A bad token gets a `401` here and never reaches a tool. A positive answer is cached for 30

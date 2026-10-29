@@ -25,7 +25,7 @@ reach the SSH broker service.
 - `internal/hydra/` - the Ory Hydra JWT verifier (JWKS fetch and cache).
 - `internal/tools/` - the MCP tools; each is a thin mapping onto the gateway client.
 - `internal/gwclient/` - the machine GraphQL client; every call takes the caller's token.
-- `internal/cliauth/` - the token and URL rules both commands share.
+- `internal/cliauth/` - the token and URL rules both commands share, and their `login`: the gateway's loopback and PKCE sign-in, with the token kept in the macOS Keychain.
 - `internal/secretrun/`, `internal/secretput/` - the logic behind the two commands.
 - `scripts/cli-dist.sh` - cross-builds the commands into `dist/`.
 - `docs/` - configuration, API, runbook and the command pages.
