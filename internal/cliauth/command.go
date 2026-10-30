@@ -90,7 +90,7 @@ func RunAuth(ctx context.Context, s Session, args []string) int {
 	}
 	lctx, cancel := context.WithTimeout(ctx, LoginTimeout)
 	defer cancel()
-	token, err := Login(lctx, LoginOptions{Base: base, ClientName: s.Prog + " on " + host, Open: open, Out: s.Stderr})
+	token, err := Login(lctx, LoginOptions{Base: base, ClientName: s.Prog + " on " + host, Command: s.Prog, Open: open, Out: s.Stderr})
 	if err != nil {
 		return fail(err)
 	}

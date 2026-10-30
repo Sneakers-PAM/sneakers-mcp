@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -34,19 +35,28 @@ type gateway struct {
 	redirect   string
 	state      string
 	// deny answers the authorize step with access_denied; wrongState with
-	// another state; token is what /oauth2/token hands out.
+	// another state; token is what /oauth2/token hands out, and with none it refuses the code.
 	deny, wrongState bool
 	token            string
 	exchanged        int
+	// landed gets the query the browser ends on, the Sneakers page that
+	// says how the sign-in went, and how many codes were exchanged by then.
+	landed chan landing
+}
+
+type landing struct {
+	query     url.Values
+	exchanged int
 }
 
 func newGateway(t *testing.T) *gateway {
-	g := &gateway{t: t, token: "snk_u_" + strings.Repeat("A", 43)}
+	g := &gateway{t: t, token: "snk_u_" + strings.Repeat("A", 43), landed: make(chan landing, 1)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", g.metadata)
 	mux.HandleFunc("POST /oauth2/register", g.register)
 	mux.HandleFunc("GET /oauth2/authorize", g.authorize)
 	mux.HandleFunc("POST /oauth2/token", g.exchange)
+	mux.HandleFunc("GET /cli/signed-in", g.land)
 	g.srv = httptest.NewServer(mux)
 	t.Cleanup(g.srv.Close)
 	return g
@@ -110,12 +120,36 @@ func (g *gateway) exchange(w http.ResponseWriter, r *http.Request) {
 	defer g.mu.Unlock()
 	g.exchanged++
 	if f.Get("grant_type") != "authorization_code" || f.Get("code") != "code-1" || f.Get("client_id") != "client-1" ||
-		f.Get("redirect_uri") != g.redirect || base64.RawURLEncoding.EncodeToString(sum[:]) != g.challenge {
+		f.Get("redirect_uri") != g.redirect || base64.RawURLEncoding.EncodeToString(sum[:]) != g.challenge || g.token == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]string{"access_token": g.token, "token_type": "Bearer"})
+}
+
+func (g *gateway) land(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	l := landing{query: r.URL.Query(), exchanged: g.exchanged}
+	g.mu.Unlock()
+	select {
+	case g.landed <- l:
+	default:
+		g.t.Errorf("the browser landed twice: %v", l.query)
+	}
+	_, _ = io.WriteString(w, "<!doctype html><title>Sneakers-PAM</title>")
+}
+
+// landedOn waits for the browser to reach the Sneakers page.
+func (g *gateway) landedOn(t *testing.T) landing {
+	t.Helper()
+	select {
+	case l := <-g.landed:
+		return l
+	case <-time.After(5 * time.Second):
+		t.Fatal("the browser never reached the Sneakers page")
+		return landing{}
+	}
 }
 
 // browser follows the authorize URL the way a browser would, redirects
@@ -140,7 +174,7 @@ func login(t *testing.T, g *gateway, opened *string) (string, error) {
 	defer cancel()
 	var out strings.Builder
 	return cliauth.Login(ctx, cliauth.LoginOptions{
-		Base: g.srv.URL, ClientName: "sneakers-put on laptop-01", Open: browser(t, opened), Out: &out, HTTP: g.srv.Client(),
+		Base: g.srv.URL, ClientName: "sneakers-put on laptop-01", Command: "sneakers-put", Open: browser(t, opened), Out: &out, HTTP: g.srv.Client(),
 	})
 }
 
@@ -165,21 +199,33 @@ func TestLoginGetsAPersonalTokenThroughLoopbackAndPKCE(t *testing.T) {
 	if !strings.HasPrefix(opened, g.srv.URL+"/oauth2/authorize?") || len(g.state) < 32 {
 		t.Fatalf("opened %q with state %q", opened, g.state)
 	}
+	// The browser ends on the Sneakers page, sent there only once the token
+	// is in hand, never on a page the loopback listener serves.
+	if l := g.landedOn(t); l.exchanged != 1 || l.query.Encode() != "client=sneakers-put" {
+		t.Fatalf("landed on %q after %d exchanges", l.query.Encode(), l.exchanged)
+	}
 }
 
 func TestLoginRefusesWhatTheFlowDoesntProve(t *testing.T) {
-	for name, set := range map[string]func(*gateway){
-		"denied":            func(g *gateway) { g.deny = true },
-		"another state":     func(g *gateway) { g.wrongState = true },
-		"a service token":   func(g *gateway) { g.token = "snk_sa_" + strings.Repeat("A", 43) },
-		"a malformed token": func(g *gateway) { g.token = "snk_u_short value" },
+	for name, c := range map[string]struct {
+		set    func(*gateway)
+		reason string
+	}{
+		"denied":            {func(g *gateway) { g.deny = true }, "denied"},
+		"another state":     {func(g *gateway) { g.wrongState = true }, "state"},
+		"a refused code":    {func(g *gateway) { g.token = "" }, "exchange"},
+		"a service token":   {func(g *gateway) { g.token = "snk_sa_" + strings.Repeat("A", 43) }, "exchange"},
+		"a malformed token": {func(g *gateway) { g.token = "snk_u_short value" }, "exchange"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			g := newGateway(t)
-			set(g)
+			c.set(g)
 			var opened string
 			if token, err := login(t, g, &opened); err == nil {
 				t.Fatalf("logged in with %q", token)
+			}
+			if l := g.landedOn(t); l.query.Get("client") != "sneakers-put" || l.query.Get("reason") != c.reason {
+				t.Fatalf("landed on %q, want reason %s", l.query.Encode(), c.reason)
 			}
 		})
 	}
@@ -195,8 +241,8 @@ func TestLoginDoesntExchangeAForeignCallback(t *testing.T) {
 	if _, err := login(t, g, &opened); err == nil || !strings.Contains(err.Error(), "state") {
 		t.Fatalf("got %v", err)
 	}
-	if g.exchanged != 0 {
-		t.Fatalf("exchanged %d codes", g.exchanged)
+	if l := g.landedOn(t); l.exchanged != 0 {
+		t.Fatalf("exchanged %d codes", l.exchanged)
 	}
 }
 
@@ -238,6 +284,9 @@ func TestLoginPrintsTheLinkWithoutABrowser(t *testing.T) {
 	browser(t, &opened)(link)
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+	if l := g.landedOn(t); l.exchanged != 1 {
+		t.Fatalf("landed after %d exchanges", l.exchanged)
 	}
 }
 
