@@ -280,6 +280,13 @@ func TestLoginPrintsTheLinkWithoutABrowser(t *testing.T) {
 			}
 		}
 	}
+	// With no browser here, it says how to finish from another machine:
+	// forward the loopback port the redirect names.
+	u, _ := url.Parse(link)
+	redirect, _ := url.Parse(u.Query().Get("redirect_uri"))
+	if want := "ssh -L " + redirect.Port() + ":127.0.0.1:" + redirect.Port(); !strings.Contains(readSync(&out), want) {
+		t.Fatalf("no %q in %q", want, readSync(&out))
+	}
 	var opened string
 	browser(t, &opened)(link)
 	if err := <-done; err != nil {

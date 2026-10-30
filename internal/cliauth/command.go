@@ -22,11 +22,15 @@ func LoginUsage(prog string) string {
   %[1]s logout
 
 login signs you in to SNEAKERS_URL in your browser (the gateway's sign-in
-and consent, with your second factor) and keeps the personal token it gets
-in the macOS Keychain (service %[2]s, one item per gateway host), so
-nobody copies a token. SNEAKERS_TOKEN, when set, still wins over it.
-logout removes the stored token from the Keychain; revoke it on the Tokens
-page to end it on the gateway too.
+and consent, with your second factor) and keeps the personal token it gets,
+so nobody copies a token: in the macOS Keychain, or on Linux in the Secret
+Service keyring (service %[2]s, one item per gateway host) when a session
+runs one, else in a file only you can read under $XDG_CONFIG_HOME/sneakers/.
+It says where it put it. SNEAKERS_TOKEN, when set, still wins over it.
+With -no-open it prints the link and the ssh -L command that finishes the
+sign-in from another machine's browser.
+logout removes the stored token; revoke it on the Tokens page to end it on
+the gateway too.
 `, prog, KeychainService)
 }
 
@@ -71,13 +75,13 @@ func RunAuth(ctx context.Context, s Session, args []string) int {
 		return fail(err)
 	}
 	if s.Store == nil {
-		return fail(errors.New("the token is kept in the macOS Keychain, which this system doesn't have; set " + TokenEnv + " instead"))
+		return fail(errors.New("login keeps the token in the macOS Keychain or on Linux, and this system is neither; set " + TokenEnv + " instead"))
 	}
 	if args[0] == "logout" {
 		if err := s.Store.Delete(account); err != nil {
 			return fail(err)
 		}
-		_, _ = fmt.Fprintf(s.Stdout, "Removed the stored token for %s.\n", account)
+		_, _ = fmt.Fprintf(s.Stdout, "Removed the stored token for %s from %s.\n", account, s.Store.Where(account))
 		return 0
 	}
 	host, _ := s.HostName()
@@ -97,7 +101,7 @@ func RunAuth(ctx context.Context, s Session, args []string) int {
 	if err := s.Store.Set(account, token); err != nil {
 		return fail(err)
 	}
-	_, _ = fmt.Fprintf(s.Stdout, "Signed in to %s. The token is in the macOS Keychain (service %s, account %s).\n", account, KeychainService, account)
+	_, _ = fmt.Fprintf(s.Stdout, "Signed in to %s. The token is in %s.\n", account, s.Store.Where(account))
 	return 0
 }
 

@@ -55,7 +55,7 @@ func TestLoginNeedsAStoreAndAnHTTPSGateway(t *testing.T) {
 	g := newGateway(t)
 	var stdout, stderr strings.Builder
 	s := session(t, g, nil, &stdout, &stderr)
-	if code := cliauth.RunAuth(context.Background(), s, []string{"login", "-insecure-localhost"}); code == 0 || !strings.Contains(readSync(&stderr), "Keychain") {
+	if code := cliauth.RunAuth(context.Background(), s, []string{"login", "-insecure-localhost"}); code == 0 || !strings.Contains(readSync(&stderr), "SNEAKERS_TOKEN") {
 		t.Fatalf("logged in with no store: %s", readSync(&stderr))
 	}
 	s = session(t, g, memStore{}, &stdout, &stderr)

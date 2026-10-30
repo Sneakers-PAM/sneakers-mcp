@@ -30,7 +30,7 @@ import (
 )
 
 // tokenStore is where `login` keeps the personal token (the macOS
-// Keychain); the tests replace it.
+// Keychain, or on Linux the keyring or a 0600 file); the tests replace it.
 var tokenStore = cliauth.DefaultStore()
 
 type config struct {

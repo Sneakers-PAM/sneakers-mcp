@@ -17,6 +17,7 @@ type memStore map[string]string
 func (m memStore) Get(account string) (string, bool, error) { v, ok := m[account]; return v, ok, nil }
 func (m memStore) Set(account, token string) error          { m[account] = token; return nil }
 func (m memStore) Delete(account string) error              { delete(m, account); return nil }
+func (m memStore) Where(account string) string              { return "memory (" + account + ")" }
 
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
@@ -67,6 +68,7 @@ type brokenStore struct{}
 func (brokenStore) Get(string) (string, bool, error) { return "", false, errors.New("keychain locked") }
 func (brokenStore) Set(string, string) error         { return nil }
 func (brokenStore) Delete(string) error              { return nil }
+func (brokenStore) Where(string) string              { return "nowhere" }
 
 func TestResolveSaysWhenTheStoreFails(t *testing.T) {
 	_, _, err := cliauth.Resolve(env(map[string]string{"SNEAKERS_URL": "https://sneakers.example.org"}), false, brokenStore{})

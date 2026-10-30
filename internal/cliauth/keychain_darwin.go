@@ -25,10 +25,7 @@ const securityTool = "/usr/bin/security"
 // errItemNotFound is security(1)'s exit status for a missing item.
 const errItemNotFound = 44
 
-var (
-	safeService = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
-	safeAccount = regexp.MustCompile(`^[a-z0-9.:\[\]-]+$`)
-)
+var safeService = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
 
 func (k keychain) check(account string) error {
 	if !safeService.MatchString(k.service) || !safeAccount.MatchString(account) {
@@ -95,4 +92,8 @@ func (k keychain) Delete(account string) error {
 		return fmt.Errorf("keychain: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
+}
+
+func (k keychain) Where(account string) string {
+	return fmt.Sprintf("the macOS Keychain (service %s, account %s)", k.service, account)
 }

@@ -198,7 +198,7 @@ fails. Both are refused while a scheduled rotation of the secret is already queu
 
 Mint a service-account API token with the gateway's `mintApiToken` (an admin action; the token is
 shown once). A person's own token comes from an OAuth sign-in (below, or `sneakers-put login`,
-which keeps it in the macOS Keychain); no page shows one to copy. Then give the MCP client the URL and a
+which keeps it in the macOS Keychain or the Linux keyring, or a `0600` file on a headless Linux box); no page shows one to copy. Then give the MCP client the URL and a
 static `Authorization` header. Most clients take a JSON config of this shape:
 
 ```json
