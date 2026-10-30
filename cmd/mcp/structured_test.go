@@ -40,7 +40,8 @@ var gatewayReplies = func() []struct{ match, body string } {
 		{"foldersForPrincipal", `{"data":{"foldersForPrincipal":[{"id":"f1","name":"Infra","parentId":null,"path":"Infra","canAuthor":true}]}}`},
 		{"redeemSecretUse", `{"data":{"redeemSecretUse":{"value":"REVEALED-VALUE","use":{"id":"use-1","secretId":"s1","secretName":"svc","fieldKey":"password","argv":[],"state":"REDEEMED","expiresAtUnix":1,"approvalUrl":"https://sneakers.example.org/approvals"}}}}`},
 		{"secretUse(", `{"data":{"secretUse":{"id":"use-1","secretId":"s1","secretName":"svc","fieldKey":"password","argv":[],"state":"APPROVED","expiresAtUnix":1,"approvalUrl":"https://sneakers.example.org/approvals"}}}`},
-		{"secretTypes", `{"data":{"secretTypes":[{"id":"t1","name":"Password","fields":[{"key":"password","label":"Password","kind":"PASSWORD","required":true,"sensitive":true},{"key":"url","label":"URL","kind":"TEXT","required":false,"sensitive":false}]}]}}`},
+		{"secretTypes", `{"data":{"secretTypes":[{"id":"t1","name":"Password","fields":[{"key":"password","label":"Password","kind":"PASSWORD","required":true,"sensitive":true},{"key":"url","label":"URL","kind":"TEXT","required":false,"sensitive":false}]},` +
+			`{"id":"type-ssh-key","name":"SSH Key","fields":[{"key":"publicKey","label":"Public Key","kind":"MULTILINE","required":false,"sensitive":false},{"key":"privateKey","label":"Private Key","kind":"SENSITIVE","required":true,"sensitive":true}]}]}}`},
 	}
 }()
 
@@ -60,6 +61,7 @@ var structuredCalls = map[string]map[string]any{
 	"sneakers_get_secret":             {"id": "s1", "fieldKey": "password"},
 	"sneakers_create_secret":          {"folderId": "f1", "typeId": "t1", "name": "svc", "fields": []any{map[string]any{"key": "username", "value": "u"}}},
 	"sneakers_generate_secret":        {"folderId": "f1", "typeId": "t1", "name": "svc"},
+	"sneakers_generate_ssh_key":       {"folderId": "f1", "name": "deploy key"},
 	"sneakers_move_secret":            {"id": "s1", "destFolderId": "f2"},
 	"sneakers_change_secret_type":     {"id": "s1", "newTypeId": "t2"},
 	"sneakers_list_folders":           {"query": "inf"},
