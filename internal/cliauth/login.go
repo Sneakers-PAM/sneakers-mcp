@@ -84,6 +84,12 @@ func Login(ctx context.Context, o LoginOptions) (string, error) {
 		"code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"}, "state": {state},
 	}.Encode()
 	_, _ = fmt.Fprintf(o.Out, "Sign in to Sneakers and approve %q in your browser.\nIf no browser opened, open this link:\n\n  %s\n\n", o.ClientName, link)
+	if o.Open == nil {
+		// The browser can be on another machine, as long as its 127.0.0.1
+		// reaches this listener.
+		port := ln.Addr().(*net.TCPAddr).Port
+		_, _ = fmt.Fprintf(o.Out, "To finish from a browser on another machine, run this there first, then open the link:\n\n  ssh -L %d:127.0.0.1:%d <this machine>\n\n", port, port)
+	}
 	if o.Open != nil {
 		o.Open(link)
 	}

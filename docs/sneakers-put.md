@@ -8,7 +8,7 @@ your shell history. The MCP tools `sneakers_create_secret` and
 
 ```sh
 export SNEAKERS_URL=https://sneakers.example.org
-sneakers-put login   # once: sign in in your browser; the token goes to the Keychain
+sneakers-put login   # once: sign in in your browser; the token goes to the Keychain or keyring
 
 # Create. The folder and type ids come from sneakers_list_folders and
 # sneakers_list_secret_types.
@@ -30,8 +30,7 @@ the same usage to stderr and exits 2.
 ## Signing in
 
 `sneakers-put login` (or `sneakers-run login`, which is the same) signs you in to `SNEAKERS_URL`
-in your browser and keeps the personal token it gets in the macOS Keychain, so you never copy a
-token:
+in your browser and keeps the personal token it gets on this machine, so you never copy a token:
 
 ```sh
 export SNEAKERS_URL=https://sneakers.example.org
@@ -44,18 +43,68 @@ factor, and the consent naming `sneakers-put on <this host>`), takes the code on
 PKCE `S256` check, and exchanges it for a personal token (`snk_u_...`). Once the exchange is done,
 the browser goes on to the Sneakers page `/cli/signed-in`, which says the command is signed in and as
 whom, or why it failed; the loopback listener serves no page of its own. `-no-open` prints the link
-instead of opening a browser (`$BROWSER`, else `xdg-open` or `open`). The token goes into the login
-Keychain as a password item with the service `Sneakers-PAM` and the gateway host as the account,
-written through `security`'s standard input, never its command line. It's never printed.
+instead of opening a browser (`$BROWSER`, else `xdg-open` or `open`). The token is never printed.
 
-- Every later run reads the token from the Keychain for the gateway `SNEAKERS_URL` names.
-  `SNEAKERS_TOKEN`, when set, is used instead.
-- Run `login` again to replace the token. `sneakers-put logout` removes it from the Keychain;
-  revoke it on the Tokens page to end it on the gateway too.
-- The Keychain is macOS only. Elsewhere `login` refuses, and `SNEAKERS_TOKEN` must hold a personal
-  token.
+### Where the token is kept
+
+`login` says where it put the token, and `logout` removes it from there.
+
+| System | Where |
+|---|---|
+| macOS | The login Keychain, as a password item with the service `Sneakers-PAM` and the gateway host as the account, written through `security`'s standard input, never its command line. |
+| Linux, with a keyring | The Secret Service keyring that the desktop session runs (GNOME Keyring, KWallet), as an item with the service `Sneakers-PAM` and the gateway host as the account. |
+| Linux, headless | When no keyring is running on the session bus, a file only you can read: `$XDG_CONFIG_HOME/sneakers/token-<gateway host>` (`~/.config/sneakers/` when `XDG_CONFIG_HOME` isn't set), mode `0600` in a `0700` folder. A token file anyone else can read is refused until you `chmod 600` it or sign in again. |
+
+- Every later run reads the token for the gateway `SNEAKERS_URL` names. `SNEAKERS_TOKEN`, when
+  set, is used instead.
+- On Linux, a token from an earlier headless sign-in is still found once a keyring is running, and
+  the next `login` moves it into the keyring and removes the file.
+- Run `login` again to replace the token. `sneakers-put logout` removes it; revoke it on the
+  Tokens page to end it on the gateway too.
+- On other systems `login` refuses, and `SNEAKERS_TOKEN` must hold a personal token.
 - The gateway records the token like an MCP client's (`client_kind: mcp`), so while MCP is turned
   off on the appliance (the `mcp.enabled` setting), `login` and the token are refused.
+
+### Sign in on a headless box
+
+A box with no browser can still sign in: the browser runs on another machine, and an SSH port
+forward carries its redirect back to the box's `127.0.0.1`.
+
+#### Before you start
+
+- You can SSH from a machine with a browser (your laptop) to the headless box.
+- `SNEAKERS_URL` on the box names the same Sneakers your laptop's browser reaches.
+
+1. On the box, start the sign-in without a browser:
+
+   ```sh
+   export SNEAKERS_URL=https://sneakers.example.org
+   sneakers-put login -no-open
+   ```
+
+   It prints the sign-in link and an `ssh -L` command with the port it's listening on, such as:
+
+   ```text
+   To finish from a browser on another machine, run this there first, then open the link:
+
+     ssh -L 41023:127.0.0.1:41023 <this machine>
+   ```
+
+2. On your laptop, in a second terminal, run that command with the box's address in place of
+   `<this machine>`, and leave it open:
+
+   ```sh
+   ssh -N -L 41023:127.0.0.1:41023 admin@build-01.example.org
+   ```
+
+3. Open the link in your laptop's browser, sign in and approve the consent. The browser's redirect
+   to `127.0.0.1:41023` goes through the forward to the box, and ends on the Sneakers page that says
+   the command is signed in.
+
+4. On the box, `login` says it's signed in and where it put the token. Close the `ssh` in step 2.
+
+The port changes on every sign-in, so use the one this run printed. The link only works for about
+ten minutes, the same as any `login`.
 
 ## Fields
 

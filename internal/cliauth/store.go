@@ -6,6 +6,7 @@ package cliauth
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -17,16 +18,23 @@ type Store interface {
 	Set(account, token string) error
 	// Delete removes account's token; removing none is no error.
 	Delete(account string) error
+	// Where says where account's token is kept, for the person to read.
+	Where(account string) string
 }
 
-// KeychainService is the macOS Keychain service the tokens are kept under,
-// one item per gateway host.
+// KeychainService is the service the tokens are kept under in the macOS
+// Keychain and the Secret Service keyring, one item per gateway host.
 const KeychainService = "Sneakers-PAM"
 
 // DefaultStore is where `login` keeps the token on this system: the login
-// Keychain on macOS. It is nil where there's no store, and then only
-// SNEAKERS_TOKEN gives a token.
+// Keychain on macOS; on Linux the Secret Service keyring when a session runs
+// one, else a file only this user can read under $XDG_CONFIG_HOME/sneakers/.
+// It is nil where there's no store, and then only SNEAKERS_TOKEN gives a
+// token.
 func DefaultStore() Store { return defaultStore() }
+
+// safeAccount is the shape of an Account every store takes.
+var safeAccount = regexp.MustCompile(`^[a-z0-9.:\[\]-]+$`)
 
 // Account is the store's name for a gateway: its host, with the port when
 // the URL has one, in lower case.

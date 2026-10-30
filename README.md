@@ -49,8 +49,8 @@ go install github.com/Sneakers-PAM/sneakers-mcp/cmd/sneakers-put@latest
 ```
 
 Both need `SNEAKERS_URL` (your Sneakers base URL, `https://` only) and your personal token, which
-`login` gets by signing you in in the browser and keeps in the macOS Keychain (`SNEAKERS_TOKEN`
-overrides it):
+`login` gets by signing you in in the browser and keeps in the macOS Keychain, or on Linux in the
+Secret Service keyring or, on a headless box, a `0600` file (`SNEAKERS_TOKEN` overrides it):
 
 ```bash
 export SNEAKERS_URL=https://sneakers.example.org
