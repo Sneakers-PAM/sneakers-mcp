@@ -42,6 +42,11 @@ type LoginOptions struct {
 // listener serves no page of its own, it sends the browser there.
 const landingPath = "/cli/signed-in"
 
+// softwareID is the RFC 7591 software_id the commands register with. The
+// gateway mints a client_kind cli token for it, which keeps working while
+// the MCP is turned off.
+const softwareID = "sneakers-cli"
+
 // callbackPath is the loopback redirect URI's path. The gateway takes any
 // port on it, so each sign-in listens on a fresh one.
 const callbackPath = "/callback"
@@ -155,7 +160,7 @@ func discover(ctx context.Context, hc *http.Client, base string) (metadata, erro
 
 func register(ctx context.Context, hc *http.Client, endpoint, name string) (string, error) {
 	body, _ := json.Marshal(map[string]any{
-		"client_name": name, "redirect_uris": []string{"http://127.0.0.1" + callbackPath},
+		"client_name": name, "software_id": softwareID, "redirect_uris": []string{"http://127.0.0.1" + callbackPath},
 		"grant_types": []string{"authorization_code"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none",
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
