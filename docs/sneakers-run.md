@@ -37,6 +37,42 @@ couldn't be prepared, approved or redeemed.
   match the program exactly as typed, bare name or absolute path.
 - `SNEAKERS_URL` must be `https://`. Plain `http://` is accepted only for localhost with
   `-insecure-localhost`, for testing against a local gateway.
+- The gateway's certificate is checked against the system's roots, plus the certificates in
+  `-ca-file` or `SNEAKERS_CA_FILE` when one is given. There's no way to skip the check.
+
+## A new appliance's own certificate
+
+Until an owner uploads a certificate on the :8443 Certificates page, a new appliance serves
+Sneakers on 443 with its own self-signed certificate, which no system trusts. Fetch it, check its
+fingerprint, and point `sneakers-run` at it; it then trusts that certificate on top of the
+system's roots, and still checks the host name.
+
+1. Fetch the certificate the box serves on 443:
+
+   ```sh
+   mkdir -p ~/.config/sneakers
+   openssl s_client -connect sneakers.example.org:443 -servername sneakers.example.org </dev/null 2>/dev/null \
+     | openssl x509 -outform PEM > ~/.config/sneakers/box.pem
+   ```
+
+2. Print its SHA-256 fingerprint, and compare it with the one the :8443 Certificates page shows
+   for **Product (443)**. If they differ, don't use the file:
+
+   ```sh
+   openssl x509 -in ~/.config/sneakers/box.pem -noout -fingerprint -sha256
+   ```
+
+3. Use it with `-ca-file`, or for every run with `SNEAKERS_CA_FILE`:
+
+   ```sh
+   export SNEAKERS_CA_FILE=~/.config/sneakers/box.pem
+   sneakers-run -secret <secret id> -- ssh admin@router-01
+   ```
+
+`-ca-file` wins over `SNEAKERS_CA_FILE`. A file that can't be read, holds no certificate or also
+holds a private key is refused before any request. See
+[sneakers-put.md](sneakers-put.md#a-new-appliances-own-certificate) for the details, which are the
+same for both commands.
 
 ## Several commands on one approval page
 

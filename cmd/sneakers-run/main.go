@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -39,6 +40,7 @@ const runIDEnv = "SNEAKERS_RUN_ID"
 
 type config struct {
 	endpoint string
+	hc       *http.Client
 	noOpen   bool
 	opts     secretrun.Options
 }
@@ -65,6 +67,8 @@ Flags:
   -purpose <text>       one line saying what the command is for, shown on the
                         approval page
   -no-open              print the approval link without opening a browser
+  -ca-file <pem>        also trust the certificates in this PEM file for
+                        SNEAKERS_URL, such as a new appliance's own
   -insecure-localhost   allow an http:// SNEAKERS_URL on localhost (testing only)
   -h, -help             print this help
 
@@ -74,6 +78,8 @@ Environment:
   SNEAKERS_URL     Sneakers base URL; must be https://
   SNEAKERS_TOKEN   a personal token (snk_u_...) to use instead of the one
                    sneakers-run login stored; not passed to the command
+  SNEAKERS_CA_FILE PEM file of extra certificates to trust, used when
+                   -ca-file isn't given
   SNEAKERS_RUN_ID  run id used when -run-id isn't given ([A-Za-z0-9_-],
                    at most 64 characters)
   BROWSER          browser used to open the approval page and the sign-in
@@ -88,6 +94,7 @@ Examples:
 
 type flags struct {
 	secret, field, inject, label, runID, purpose *string
+	caFile                                       *string
 	insecureLocal, noOpen                        *bool
 }
 
@@ -103,6 +110,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		purpose:       fs.String("purpose", "", "shown to the owner on the approval page"),
 		insecureLocal: fs.Bool("insecure-localhost", false, "allow http:// to localhost (testing only)"),
 		noOpen:        fs.Bool("no-open", false, "print the approval link without opening a browser"),
+		caFile:        fs.String("ca-file", "", "PEM file of extra roots to trust for SNEAKERS_URL"),
 	}
 }
 
@@ -135,8 +143,13 @@ func parse(args []string, getenv func(string) string) (config, error) {
 	if runID != "" && !gwclient.ValidRunID(runID) {
 		return config{}, fmt.Errorf("-run-id or %s must be 1 to 64 letters, digits, '_' or '-'", runIDEnv)
 	}
+	hc, err := cliauth.HTTPClient(cliauth.CAFile(*f.caFile, getenv))
+	if err != nil {
+		return config{}, err
+	}
 	return config{
 		endpoint: endpoint,
+		hc:       hc,
 		noOpen:   *noOpen,
 		opts: secretrun.Options{
 			Token: token, SecretID: *secret, FieldKey: *field, Label: *label, RunID: runID, Purpose: *f.purpose,
@@ -175,7 +188,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	c.opts.Open = opener(c, getenv, exec.LookPath)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	code, err := secretrun.Run(ctx, gwclient.New(c.endpoint, nil), c.opts)
+	code, err := secretrun.Run(ctx, gwclient.New(c.endpoint, c.hc), c.opts)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "sneakers-run:", err)
 		return 1

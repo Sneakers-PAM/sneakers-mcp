@@ -59,6 +59,10 @@ sneakers-run -secret <id> -- ssh admin@router-01
 sneakers-put -id <secret id> -field password=@./new.pw
 ```
 
+A new appliance that still serves its own self-signed certificate is trusted with
+`SNEAKERS_CA_FILE` (or `-ca-file`) naming that certificate, after you check its fingerprint;
+certificate checking is never turned off.
+
 See [docs/sneakers-run.md](docs/sneakers-run.md) and [docs/sneakers-put.md](docs/sneakers-put.md).
 
 ## 🛠 Develop
