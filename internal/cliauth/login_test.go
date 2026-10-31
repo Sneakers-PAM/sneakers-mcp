@@ -173,17 +173,31 @@ func browser(t *testing.T, opened *string) func(string) {
 
 // browserWith is browser with hc, such as one that trusts a box's own
 // certificate the way a person's browser does once they accept it.
+//
+// Login returns before the browser reaches the Sneakers page, so the test
+// collects the outcome in a cleanup. Cleanups run last first, which keeps
+// the gateway, started before the browser opened, up until it has landed.
 func browserWith(t *testing.T, hc *http.Client, opened *string) func(string) {
 	return func(u string) {
 		*opened = u
+		done := make(chan error, 1)
 		go func() {
 			resp, err := hc.Get(u) // #nosec G107 -- the test's own authorize URL
-			if err != nil {
-				t.Errorf("the browser couldn't follow %s: %v", u, err)
-				return
+			if err == nil {
+				_ = resp.Body.Close()
 			}
-			_ = resp.Body.Close()
+			done <- err
 		}()
+		t.Cleanup(func() {
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Errorf("the browser couldn't follow %s: %v", u, err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Errorf("the browser never finished following %s", u)
+			}
+		})
 	}
 }
 
