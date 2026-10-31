@@ -42,7 +42,19 @@ type StatusError struct{ Code int }
 func (e *StatusError) Error() string { return fmt.Sprintf("gateway returned HTTP %d", e.Code) }
 
 // GraphQLError carries the gateway's errors[] messages (e.g. a RACI denial).
-type GraphQLError struct{ Messages []string }
+// Details keeps each error's stable extensions alongside its message.
+type GraphQLError struct {
+	Messages []string
+	Details  []ErrorDetail
+}
+
+// ErrorDetail is one entry of the gateway's errors[]. Code is the canonical
+// gRPC code name and Reason the service's stable reason; either may be empty.
+type ErrorDetail struct {
+	Message string
+	Code    string
+	Reason  string
+}
 
 func (e *GraphQLError) Error() string { return strings.Join(e.Messages, "; ") }
 
@@ -194,7 +206,11 @@ func (c *Client) do(ctx context.Context, token, query string, vars map[string]an
 	var env struct {
 		Data   json.RawMessage `json:"data"`
 		Errors []struct {
-			Message string `json:"message"`
+			Message    string `json:"message"`
+			Extensions struct {
+				Code   string `json:"code"`
+				Reason string `json:"reason"`
+			} `json:"extensions"`
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -202,14 +218,16 @@ func (c *Client) do(ctx context.Context, token, query string, vars map[string]an
 	}
 	if len(env.Errors) > 0 {
 		msgs := make([]string, 0, len(env.Errors))
+		details := make([]ErrorDetail, 0, len(env.Errors))
 		for _, e := range env.Errors {
 			m := e.Message
 			if len(m) > maxErrorMessageLen {
 				m = m[:maxErrorMessageLen] + "..."
 			}
 			msgs = append(msgs, m)
+			details = append(details, ErrorDetail{Message: m, Code: e.Extensions.Code, Reason: e.Extensions.Reason})
 		}
-		return &GraphQLError{Messages: msgs}
+		return &GraphQLError{Messages: msgs, Details: details}
 	}
 	if len(env.Data) == 0 || string(env.Data) == "null" {
 		return errors.New("gateway response has no data")

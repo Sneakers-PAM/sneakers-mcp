@@ -29,16 +29,21 @@ func (c *Client) RenameSecret(ctx context.Context, token, id, name string) (*Sec
 
 const folderFields = `id name parentId path canAuthor`
 
-const createFolderMutation = `mutation CreateFolder($parentId:ID!,$name:String!){
+const createFolderMutation = `mutation CreateFolder($parentId:ID,$name:String!){
   createFolderForPrincipal(parentId:$parentId,name:$name){` + folderFields + `}
 }`
 
-// CreateFolder creates a folder under parentID.
+// CreateFolder creates a folder under parentID, or at the top level when
+// parentID is empty.
 func (c *Client) CreateFolder(ctx context.Context, token, parentID, name string) (*Folder, error) {
 	var out struct {
 		Folder *Folder `json:"createFolderForPrincipal"`
 	}
-	if err := c.do(ctx, token, createFolderMutation, map[string]any{"parentId": parentID, "name": name}, &out); err != nil {
+	vars := map[string]any{"name": name}
+	if parentID != "" {
+		vars["parentId"] = parentID
+	}
+	if err := c.do(ctx, token, createFolderMutation, vars, &out); err != nil {
 		return nil, err
 	}
 	if out.Folder == nil {
