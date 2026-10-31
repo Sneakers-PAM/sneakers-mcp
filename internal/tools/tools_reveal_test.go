@@ -23,6 +23,8 @@ type routeGateway struct {
 	mu     sync.Mutex
 	bodies map[string]string
 	seen   []string
+	// summaryID is the id the last summary read asked for.
+	summaryID string
 }
 
 func newRouteGateway(t *testing.T, bodies map[string]string) *routeGateway {
@@ -31,14 +33,23 @@ func newRouteGateway(t *testing.T, bodies map[string]string) *routeGateway {
 	g.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		var req struct {
-			Query string `json:"query"`
+			Query     string `json:"query"`
+			Variables struct {
+				ID string `json:"id"`
+			} `json:"variables"`
 		}
 		_ = json.Unmarshal(b, &req)
 		g.mu.Lock()
 		defer g.mu.Unlock()
-		for _, op := range []string{"revealSecretFieldForPrincipal", "prepareSecretUse", "redeemSecretUse", "secretUse("} {
+		for _, op := range []string{"revealSecretFieldForPrincipal", "prepareSecretUse", "redeemSecretUse", "secretUse(", "secretForPrincipal"} {
 			if strings.Contains(req.Query, op) {
+				if _, routed := g.bodies[op]; op == "secretForPrincipal" && !routed {
+					break
+				}
 				g.seen = append(g.seen, op)
+				if op == "secretForPrincipal" {
+					g.summaryID = req.Variables.ID
+				}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, g.bodies[op])
 				return

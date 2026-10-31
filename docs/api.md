@@ -58,7 +58,7 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_list_folders` | read | Folders the caller may read, with path and `canAuthor`. |
 | `sneakers_list_secret_types` | read | The type catalog: ids and fields (kind, required, sensitive). |
 | `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the secret needs approval for each personal-token reveal, it returns `approvalRequired`, an `approvalUrl`, a `useId`, a `runId` and the run's `pending` list instead of a value. Optional `runId` and `task` group one task's requests on one approval page. |
-| `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. |
+| `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. Comes back with the same `secret` summary as `sneakers_get_secret`. |
 | `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. A secret that names you goes to your Personal folder unless `keepFolder` is true; see [Placement](#placement). |
 | `sneakers_generate_secret` | write | A new secret with a policy-compliant generated password, returned only when `returnValue` is true. Same placement and `keepFolder` as create. |
 | `sneakers_generate_ssh_key` | write | A new SSH Key secret with a key pair made on the Sneakers side. Returns only the public key line and its SHA-256 fingerprint, never the private key. See [Generating an SSH key](#generating-an-ssh-key). |
@@ -299,6 +299,21 @@ re-fetch and re-scan when it differs from the one you read), `valueChangedAt`,
 `rotationEnabled`, `rotatesOnCheckin` (checking the secret in after a
 check-out rotates the value), `heartbeatEnabled`, and the last rotation and
 heartbeat results. None carry a value.
+
+`valueVersion` and `valueChangedAt` show any change to the value, whatever made
+it: a rotation, a restore, or someone editing it by hand in the web app.
+`rotatedAt` only moves on a rotation, so it stays put through a manual edit. To
+tell whether a value you hold is stale, compare `valueVersion`, never
+`rotatedAt`.
+
+Every path that returns a value returns this summary as `secret` too:
+`sneakers_get_secret`, whether the read was direct or came through an approval
+already in place, and `sneakers_redeem_reveal`. It's read just before the
+value, so the version handed back can only be older than the value, never
+newer. A change is never hidden, at worst you re-fetch once more than you
+needed to. The read is best effort: if it fails or takes longer than five
+seconds, the value still comes back, without `secret`, and a reveal use isn't
+spent or held up by it.
 
 `heartbeatEnabled` false on a heartbeat-capable type can mean it's opted out, or that the target
 isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key — a new secret's
