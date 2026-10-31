@@ -38,7 +38,7 @@ sneakers-put login
 ```
 
 It uses the gateway's OAuth sign-in for native clients, the one an MCP client uses: it registers a
-client with a loopback redirect URI, opens the gateway's sign-in and consent page (your second
+client as the Sneakers CLI with a loopback redirect URI, opens the gateway's sign-in and consent page (your second
 factor, and the consent naming `sneakers-put on <this host>`), takes the code on `127.0.0.1` with a
 PKCE `S256` check, and exchanges it for a personal token (`snk_u_...`). Once the exchange is done,
 the browser goes on to the Sneakers page `/cli/signed-in`, which says the command is signed in and as
@@ -62,8 +62,11 @@ instead of opening a browser (`$BROWSER`, else `xdg-open` or `open`). The token 
 - Run `login` again to replace the token. `sneakers-put logout` removes it; revoke it on the
   Tokens page to end it on the gateway too.
 - On other systems `login` refuses, and `SNEAKERS_TOKEN` must hold a personal token.
-- The gateway records the token like an MCP client's (`client_kind: mcp`), so while MCP is turned
-  off on the appliance (the `mcp.enabled` setting), `login` and the token are refused.
+- `login` registers as the Sneakers CLI (`"software_id": "sneakers-cli"`), so the gateway records
+  the token as a CLI token (`client_kind: cli`), not an MCP client's. Once the gateway with
+  Sneakers-PAM/sneakers-gateway#150 is deployed, `login` and the token keep working while MCP is
+  turned off on the appliance (the `mcp.enabled` setting). Against an older gateway, turning MCP
+  off still refuses them.
 
 ### Sign in on a headless box
 

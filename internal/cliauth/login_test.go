@@ -33,6 +33,7 @@ type gateway struct {
 	mu         sync.Mutex
 	registered []string
 	clientName string
+	softwareID string
 	challenge  string
 	redirect   string
 	state      string
@@ -87,6 +88,7 @@ func (g *gateway) register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ClientName   string   `json:"client_name"`
 		RedirectURIs []string `json:"redirect_uris"`
+		SoftwareID   string   `json:"software_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
@@ -100,7 +102,7 @@ func (g *gateway) register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	g.mu.Lock()
-	g.registered, g.clientName = body.RedirectURIs, body.ClientName
+	g.registered, g.clientName, g.softwareID = body.RedirectURIs, body.ClientName, body.SoftwareID
 	g.mu.Unlock()
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"client_id": "client-1", "redirect_uris": body.RedirectURIs})
@@ -236,6 +238,22 @@ func TestLoginGetsAPersonalTokenThroughLoopbackAndPKCE(t *testing.T) {
 	// is in hand, never on a page the loopback listener serves.
 	if l := g.landedOn(t); l.exchanged != 1 || l.query.Encode() != "client=sneakers-put" {
 		t.Fatalf("landed on %q after %d exchanges", l.query.Encode(), l.exchanged)
+	}
+}
+
+// The gateway mints a CLI token, kept off the MCP switch, only for a client
+// that registers with the CLI's software_id.
+func TestLoginRegistersAsTheSneakersCLI(t *testing.T) {
+	g := newGateway(t)
+	var opened string
+	if _, err := login(t, g, &opened); err != nil {
+		t.Fatal(err)
+	}
+	g.landedOn(t)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.softwareID != "sneakers-cli" {
+		t.Fatalf("registered with software_id %q", g.softwareID)
 	}
 }
 
