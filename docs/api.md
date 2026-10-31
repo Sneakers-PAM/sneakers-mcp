@@ -77,7 +77,7 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_detach_secret_target` | write | Detaches one target from a secret, without touching its other targets. A no-op if it isn't attached. |
 | `sneakers_rotate_secret` | destructive | Regenerates a secret's password field under its policy and stores it as a new version. Needs Author, never just read. The new value is always returned — store it, then set it on the target yourself. Refused while a scheduled rotation is already queued or running. |
 | `sneakers_restore_secret_version` | destructive | Makes an earlier version current again, as a new version — never a history rewrite. Needs Author. Refused while a scheduled rotation is queued or running. |
-| `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason) or unreachable, never a value. |
+| `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason), unreachable, or untrusted_certificate (the target answered, but its TLS certificate failed verification; `detail` says why and no credential was sent), never a value. |
 
 Names may not contain `/`, because folder paths are joined with it.
 

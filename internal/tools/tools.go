@@ -202,7 +202,7 @@ type secretSummary struct {
 	LastRotationResult  string `json:"lastRotationResult,omitempty" jsonschema:"last rotation outcome: OK, FAILED, DEGRADED or ROTATING"`
 	RotatedAt           string `json:"rotatedAt,omitempty" jsonschema:"RFC3339 time of the last successful rotation"`
 	NextRotationAt      string `json:"nextRotationAt,omitempty" jsonschema:"RFC3339 time of the next scheduled rotation"`
-	LastHeartbeatResult string `json:"lastHeartbeatResult,omitempty" jsonschema:"last heartbeat outcome: OK, FAILED, UNREACHABLE or UNKNOWN"`
+	LastHeartbeatResult string `json:"lastHeartbeatResult,omitempty" jsonschema:"last heartbeat outcome: OK, FAILED, UNREACHABLE, UNTRUSTED_CERTIFICATE or UNKNOWN"`
 }
 
 func summaryOf(s gwclient.SecretSummary) secretSummary {
