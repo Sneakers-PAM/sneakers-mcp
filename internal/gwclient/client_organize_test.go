@@ -39,6 +39,36 @@ func TestCreateFolderSendsArgsAndDecodesFolder(t *testing.T) {
 	}
 }
 
+func TestCreateFolderWithNoParentLeavesParentIDOut(t *testing.T) {
+	var cp capture
+	srv := newFakeGateway(t, &cp, `{"data":{"createFolderForPrincipal":{"id":"f9","name":"Infrastructure","parentId":null,"path":"Infrastructure","canAuthor":true}}}`, 200)
+
+	f, err := New(srv.URL, nil).CreateFolder(context.Background(), "tok", "", "Infrastructure")
+	if err != nil || f.ID != "f9" || f.ParentID != nil {
+		t.Fatalf("f=%+v err=%v", f, err)
+	}
+	if _, sent := cp.vars["parentId"]; sent || cp.vars["name"] != "Infrastructure" {
+		t.Fatalf("vars = %#v, want no parentId", cp.vars)
+	}
+}
+
+func TestGraphQLErrorKeepsCodeAndReason(t *testing.T) {
+	var cp capture
+	srv := newFakeGateway(t, &cp, `{"data":null,"errors":[{"message":"refused","extensions":{"code":"PERMISSION_DENIED","reason":"TOP_LEVEL_FOLDERS_RESTRICTED","domain":"sneakers.vault"}}]}`, 200)
+
+	_, err := New(srv.URL, nil).CreateFolder(context.Background(), "tok", "", "x")
+	var ge *GraphQLError
+	if !errors.As(err, &ge) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(ge.Details) != 1 || ge.Details[0].Code != "PERMISSION_DENIED" || ge.Details[0].Reason != "TOP_LEVEL_FOLDERS_RESTRICTED" || ge.Details[0].Message != "refused" {
+		t.Fatalf("details = %+v", ge.Details)
+	}
+	if ge.Error() != "refused" {
+		t.Fatalf("Error() = %q", ge.Error())
+	}
+}
+
 func TestRenameFolderSendsArgsAndDecodesFolder(t *testing.T) {
 	var cp capture
 	srv := newFakeGateway(t, &cp, `{"data":{"renameFolderForPrincipal":{"id":"f9","name":"Keys","parentId":"f1","path":"Keys","canAuthor":true}}}`, 200)

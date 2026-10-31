@@ -112,6 +112,20 @@ func TestEveryToolDeclaresAnObjectOutputSchema(t *testing.T) {
 	}
 }
 
+// sneakers_create_folder must take a name alone over the wire: the SDK checks
+// arguments against the input schema, so a required parentId would refuse a
+// top-level create before the handler ran.
+func TestCreateFolderInputTakesANameAlone(t *testing.T) {
+	cs := jwtSession(t)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "sneakers_create_folder",
+		Arguments: map[string]any{"name": "Infrastructure"},
+	})
+	if err != nil || res.IsError {
+		t.Fatalf("CallTool: err=%v result=%+v", err, res)
+	}
+}
+
 // Every successful call returns structuredContent AND the same object as JSON
 // text in content[0] (for text-only clients).
 func TestEveryToolReturnsStructuredContentMatchingText(t *testing.T) {

@@ -66,7 +66,7 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_move_secret` | destructive | Moves a secret to another folder, which changes who can reach it. Author on both folders; never into a personal folder. |
 | `sneakers_change_secret_type` | destructive | Re-keys a secret into another type. Never drops a value: one with no field in the new type is appended to its notes field as `[moved from <key>]: <JSON string>`, or the call fails. The result's `automation` says what happened to rotation, heartbeat and the target. |
 | `sneakers_rename_secret` | write | The name only; values are never read or returned. |
-| `sneakers_create_folder` | write | A folder under a parent the caller can author; never at the top level or inside a personal tree. |
+| `sneakers_create_folder` | write | A folder under a parent the caller can author, or, with `parentId` left out, a top-level folder owned by the token's user. Never inside another user's personal tree. See [Top-level folders](#top-level-folders). |
 | `sneakers_rename_folder` | write | A folder the caller can author, including in their own personal tree. |
 | `sneakers_set_secret_automation` | write | Turns rotation and heartbeat off or on; both flags are set on every call. Turning heartbeat back on is refused, naming what's missing, unless the secret has a target with a connection and, for SSH Key, a pinned host key. |
 | `sneakers_list_connections` | read | The connection profiles (protocol, port, TLS) a target can bind to. |
@@ -80,6 +80,16 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason) or unreachable, never a value. |
 
 Names may not contain `/`, because folder paths are joined with it.
+
+### Top-level folders
+
+`sneakers_create_folder` with no `parentId` creates a top-level folder, the same shared folder a person makes in the web, owned by the token's user.
+
+- **By default,** any personal token can do this, whether or not its user is an admin.
+- **When an admin turns on "Restrict top-level folders to admins"** (a security setting, off by default), only a token whose user is an admin can. Anyone else gets `PERMISSION_DENIED` with reason `TOP_LEVEL_FOLDERS_RESTRICTED`, and the error names the setting.
+- **A service account** can't: nothing could own the folder. It gets `INVALID_ARGUMENT` and has to pass `parentId`.
+
+The setting doesn't touch subfolders, which still need author access to the parent. A token never creates anything in another user's personal tree or directly under the personal folders root, in any state. It can create inside its own user's personal tree.
 
 ### Reveals that need approval
 

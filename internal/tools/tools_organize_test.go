@@ -36,6 +36,81 @@ func TestCreateFolderToolForwardsAndReturnsFolder(t *testing.T) {
 	}
 }
 
+func TestCreateFolderToolWithNoParentCreatesTopLevel(t *testing.T) {
+	gw := fakeGateway(t, `{"data":{"createFolderForPrincipal":{"id":"f9","name":"Infrastructure","parentId":null,"path":"Infrastructure","canAuthor":true}}}`)
+
+	_, out, err := newTools(gw.URL, nil).createFolder(context.Background(), callReq("Bearer t"), createFolderIn{Name: "Infrastructure"})
+	if err != nil || out.Folder.ID != "f9" || out.Folder.ParentID != "" || out.Folder.Path != "Infrastructure" {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	vars, _ := gw.vars.Load().(map[string]any)
+	if _, sent := vars["parentId"]; sent || vars["name"] != "Infrastructure" {
+		t.Fatalf("vars = %#v, want no parentId", vars)
+	}
+}
+
+func TestCreateFolderToolExplainsTheTopLevelRestriction(t *testing.T) {
+	gw := fakeGateway(t, `{"data":null,"errors":[{"message":"rpc error: code = PermissionDenied desc = refused",`+
+		`"extensions":{"code":"PERMISSION_DENIED","reason":"TOP_LEVEL_FOLDERS_RESTRICTED","domain":"sneakers.vault"}}]}`)
+
+	_, out, err := newTools(gw.URL, nil).createFolder(context.Background(), callReq("Bearer t"), createFolderIn{Name: "x"})
+	if err == nil || out.Folder.ID != "" {
+		t.Fatalf("err=%v out=%+v", err, out)
+	}
+	for _, want := range []string{"PERMISSION_DENIED", "TOP_LEVEL_FOLDERS_RESTRICTED", `"Restrict top-level folders to admins"`, "parentId"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "rpc error") {
+		t.Errorf("error %q still carries the gRPC wrapper", err)
+	}
+}
+
+func TestCreateFolderToolExplainsTheServiceAccountRefusal(t *testing.T) {
+	gw := fakeGateway(t, `{"data":null,"errors":[{"message":"rpc error: code = InvalidArgument desc = parent_id is required: a machine cannot create a top-level folder",`+
+		`"extensions":{"code":"INVALID_ARGUMENT"}}]}`)
+
+	_, _, err := newTools(gw.URL, nil).createFolder(context.Background(), callReq("Bearer t"), createFolderIn{Name: "x"})
+	if err == nil {
+		t.Fatal("want the refusal")
+	}
+	for _, want := range []string{"INVALID_ARGUMENT", "service account", "parentId"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
+// Any other INVALID_ARGUMENT, such as a bad name, keeps the vault's own words.
+func TestCreateFolderToolRelaysOtherInvalidArguments(t *testing.T) {
+	const msg = "rpc error: code = InvalidArgument desc = name contains control characters"
+	gw := fakeGateway(t, `{"data":null,"errors":[{"message":"`+msg+`","extensions":{"code":"INVALID_ARGUMENT"}}]}`)
+
+	_, _, err := newTools(gw.URL, nil).createFolder(context.Background(), callReq("Bearer t"), createFolderIn{Name: "x"})
+	if err == nil || !strings.Contains(err.Error(), "name contains control characters") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCreateFolderDescriptionStatesTheTopLevelRule(t *testing.T) {
+	for _, tl := range listRegisteredTools(t) {
+		if tl.Name != toolCreateFolder {
+			continue
+		}
+		for _, want := range []string{"top-level", "Restrict top-level folders to admins", "another user's Personal tree"} {
+			if !strings.Contains(tl.Description, want) {
+				t.Errorf("description lacks %q: %s", want, tl.Description)
+			}
+		}
+		if strings.Contains(tl.Description, "never at the top level") {
+			t.Errorf("description still rules out the top level: %s", tl.Description)
+		}
+		return
+	}
+	t.Fatal("tool not registered")
+}
+
 func TestRenameFolderToolForwardsAndReturnsFolder(t *testing.T) {
 	gw := fakeGateway(t, `{"data":{"renameFolderForPrincipal":{"id":"f9","name":"Keys","parentId":"f1","path":"Keys","canAuthor":true}}}`)
 
@@ -97,7 +172,6 @@ func TestOrganizeToolsRefuseInvalidNamesBeforeCallingGateway(t *testing.T) {
 		"rename secret: name blank":      renameS(renameSecretIn{ID: "s", Name: "   "}),
 		"rename secret: name too long":   renameS(renameSecretIn{ID: "s", Name: long(maxNameLen + 1)}),
 		"rename secret: name with slash": renameS(renameSecretIn{ID: "s", Name: "a/b"}),
-		"create folder: parent missing":  createF(createFolderIn{Name: "n"}),
 		"create folder: parent too long": createF(createFolderIn{ParentID: long(maxIDLen + 1), Name: "n"}),
 		"create folder: name empty":      createF(createFolderIn{ParentID: "f"}),
 		"create folder: name too long":   createF(createFolderIn{ParentID: "f", Name: long(maxNameLen + 1)}),
