@@ -63,6 +63,7 @@ type toolset struct {
 	log zerolog.Logger
 
 	checkPoll, checkWait time.Duration // zero: defaultCheckPoll / defaultCheckWait
+	metaTimeout          time.Duration // zero: defaultMetaTimeout
 }
 
 // callerToken returns the verified caller's raw bearer token for this call.
@@ -192,15 +193,15 @@ type secretSummary struct {
 	RotationOptOut  bool `json:"rotationOptOut" jsonschema:"rotation is turned off for this secret"`
 	HeartbeatOptOut bool `json:"heartbeatOptOut" jsonschema:"heartbeat checks are turned off for this secret"`
 
-	ValueVersion           int    `json:"valueVersion" jsonschema:"goes up each time the stored values change; if it differs from the version you read, re-fetch the value and re-scan anything that used it"`
-	ValueChangedAt         string `json:"valueChangedAt,omitempty" jsonschema:"RFC3339 time of the last value change"`
+	ValueVersion           int    `json:"valueVersion" jsonschema:"goes up each time the stored values change, by any route: a rotation, a restore or a manual edit in the web app; if it differs from the version you read, re-fetch the value and re-scan anything that used it"`
+	ValueChangedAt         string `json:"valueChangedAt,omitempty" jsonschema:"RFC3339 time of the last value change, by any route, a manual edit in the web app included"`
 	RotationEnabled        bool   `json:"rotationEnabled" jsonschema:"Sneakers rotates this secret on its target, on a schedule or on demand"`
 	RotatesOnCheckin       bool   `json:"rotatesOnCheckin" jsonschema:"checking the secret in after a check-out rotates its value, so a value read during the check-out stops working"`
 	HeartbeatEnabled       bool   `json:"heartbeatEnabled" jsonschema:"heartbeat checks run against the target. For a heartbeat-capable type, false can mean it's opted out OR that the target isn't ready yet: no target, no connection, or (SSH Key only) no pinned host key. Fix that, then turn it on with sneakers_set_secret_automation; turning it on before then is refused, naming what's missing"`
 	HeartbeatBlockedReason string `json:"heartbeatBlockedReason,omitempty" jsonschema:"why heartbeatEnabled is false and not by choice: no target, no connection, or (SSH Key only) no pinned host key. Absent once heartbeat is running, when it's opted out on purpose, or when the type has no heartbeat at all"`
 
 	LastRotationResult  string `json:"lastRotationResult,omitempty" jsonschema:"last rotation outcome: OK, FAILED, DEGRADED or ROTATING"`
-	RotatedAt           string `json:"rotatedAt,omitempty" jsonschema:"RFC3339 time of the last successful rotation"`
+	RotatedAt           string `json:"rotatedAt,omitempty" jsonschema:"RFC3339 time of the last successful rotation. It only moves on a rotation, not on a manual edit: use valueVersion or valueChangedAt to tell whether a value changed"`
 	NextRotationAt      string `json:"nextRotationAt,omitempty" jsonschema:"RFC3339 time of the next scheduled rotation"`
 	LastHeartbeatResult string `json:"lastHeartbeatResult,omitempty" jsonschema:"last heartbeat outcome: OK, FAILED, UNREACHABLE, UNTRUSTED_CERTIFICATE or UNKNOWN"`
 }
@@ -392,9 +393,21 @@ type getSecretOut struct {
 	Pending          []pendingUse   `json:"pending,omitempty"`
 }
 
-// secretMeta reads a secret's summary for getSecret. It's best effort: the
-// value is what was asked for, so a failed read only leaves the summary out.
+// defaultMetaTimeout bounds the summary read that comes before a value: a
+// reveal use is only collectable for 60 seconds, so a slow read mustn't spend
+// that window.
+const defaultMetaTimeout = 5 * time.Second
+
+// secretMeta reads a secret's summary to hand back with its value. It's best
+// effort: the value is what was asked for, so a failed read only leaves the
+// summary out.
 func (t *toolset) secretMeta(ctx context.Context, token, id string) *secretSummary {
+	timeout := t.metaTimeout
+	if timeout == 0 {
+		timeout = defaultMetaTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	s, err := t.gw.GetSecret(ctx, token, id)
 	if err != nil {
 		t.log.Debug().Str("secret_id", id).Str("error", err.Error()).Msg("secret summary unavailable; returning the value without it")
@@ -433,6 +446,7 @@ func (t *toolset) getSecret(ctx context.Context, req *mcp.CallToolRequest, in ge
 			}
 			if use.State == "APPROVED" {
 				out.Value, _, err = t.gw.RedeemSecretUse(ctx, token, use.ID)
+				out.Secret = meta
 				return err
 			}
 			pending := t.runPending(ctx, token, run.ID, use)
@@ -519,10 +533,11 @@ type redeemRevealIn struct {
 	UseID string `json:"useId" jsonschema:"the useId sneakers_get_secret returned with approvalRequired"`
 }
 type redeemRevealOut struct {
-	Value       string `json:"value,omitempty"`
-	Pending     bool   `json:"pending,omitempty"`
-	ApprovalURL string `json:"approvalUrl,omitempty"`
-	Message     string `json:"message,omitempty"`
+	Value       string         `json:"value,omitempty"`
+	Secret      *secretSummary `json:"secret,omitempty" jsonschema:"the secret's metadata, read just before the value: keep valueVersion with the value and re-fetch when it changes"`
+	Pending     bool           `json:"pending,omitempty"`
+	ApprovalURL string         `json:"approvalUrl,omitempty"`
+	Message     string         `json:"message,omitempty"`
 }
 
 func (t *toolset) redeemReveal(ctx context.Context, req *mcp.CallToolRequest, in redeemRevealIn) (*mcp.CallToolResult, redeemRevealOut, error) {
@@ -540,6 +555,9 @@ func (t *toolset) redeemReveal(ctx context.Context, req *mcp.CallToolRequest, in
 					Message: pendingMessage(use)}
 				return nil
 			case "APPROVED":
+				// As in getSecret, the summary comes first so the version handed
+				// back can only be older than the value.
+				out.Secret = t.secretMeta(ctx, token, use.SecretID)
 				out.Value, _, err = t.gw.RedeemSecretUse(ctx, token, use.ID)
 				return err
 			default:
@@ -840,7 +858,10 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 			"open approvalUrl in the user's browser, once, with the environment's browser opener; after it's approved " +
 			"or confirmed, call " + toolRedeem + " with each useId. Start a new task without a runId. Approval levels cover personal tokens only: a " +
 			"service-account token's reveal is never held for approval, and is governed by the account's access rules " +
-			"and the \"Allow API access to sensitive secrets\" setting.",
+			"and the \"Allow API access to sensitive secrets\" setting. Whenever a value comes back, secret comes with " +
+			"it, the summary read just before the value: keep valueVersion with the value, and re-fetch when it changes. " +
+			"valueVersion and valueChangedAt show any value change, a manual edit in the web app included; rotatedAt only " +
+			"moves on a rotation.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, t.getSecret)
 
@@ -850,7 +871,9 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 			"by the user, using the useId from sneakers_get_secret, once for each useId of the run. Returns " +
 			"pending (with the approvalUrl) until then: if it wasn't opened yet, open approvalUrl in the user's " +
 			"browser with the environment's browser opener, then call again. The value is released " +
-			"once, within 60 seconds of approval.",
+			"once, within 60 seconds of approval. With the value comes secret, the summary read just before it: keep " +
+			"valueVersion with the value, and re-fetch when it changes. valueVersion and valueChangedAt show any value " +
+			"change, a manual edit in the web app included; rotatedAt only moves on a rotation.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, t.redeemReveal)
 
