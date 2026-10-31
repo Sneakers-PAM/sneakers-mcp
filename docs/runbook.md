@@ -77,7 +77,8 @@ JSON on stderr by default. The lines to know:
 | `mcp bearer rejected` | `reason`, `path` | A bearer was refused (warn). The reason names the check that failed, never the token. |
 
 At start the OpenTelemetry SDK, which also reads `OTEL_EXPORTER_OTLP_ENDPOINT`, prints two
-plain-text `parse url` lines when it holds the `host:port` form; export still works.
+plain-text `parse url` lines when it holds the `host:port` form; export still works. Set the URL
+form (`http://collector:4317`) and they go away.
 
 `outcome` is `ok`, `unauthenticated`, `invalid_input`, `gateway_denied_or_failed` (a GraphQL error,
 such as a RACI denial), `gateway_http_<status>` or `error` (the gateway couldn't be reached or gave
