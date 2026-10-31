@@ -26,7 +26,7 @@ type testSecretIn struct {
 	SecretID string `json:"secretId"`
 }
 type testSecretOut struct {
-	Result        string `json:"result,omitempty" jsonschema:"ok, failed, unreachable or unknown"`
+	Result        string `json:"result,omitempty" jsonschema:"ok, failed, unreachable, untrusted_certificate or unknown"`
 	Detail        string `json:"detail,omitempty" jsonschema:"the connector's reason; never a secret value"`
 	CheckedAtUnix int64  `json:"checkedAtUnix,omitempty"`
 	Pending       bool   `json:"pending"`
@@ -141,7 +141,7 @@ func registerCheckTool(s *mcp.Server, t *toolset) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: toolTestSecret,
 		Description: "Check a secret's stored credential against its target now, through the Sneakers connector, and " +
-			"return ok, failed (with the reason) or unreachable. Never returns a value. The secret needs a " +
+			"return ok, failed (with the reason), unreachable, or untrusted_certificate (the target's TLS certificate failed verification, with the reason). Never returns a value. The secret needs a " +
 			"heartbeat-capable type and a target; at most one check a minute per secret. When no connector is " +
 			"available in this environment it returns available=false with a message instead of checking.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(true)},
