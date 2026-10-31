@@ -801,6 +801,7 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 	registerAutomationTool(s, t)
 	registerUpdateTool(s, t)
 	registerRotateTools(s, t)
+	registerSSHKeyTool(s, t)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        toolFind,
@@ -866,7 +867,8 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: toolGenerate,
-		Description: "Generate a policy-compliant password and store it as a new secret. Set returnValue only if the caller " +
+		Description: "Generate a policy-compliant password and store it as a new secret. For an SSH key pair, use " +
+			toolGenerateSSHKey + " instead. Set returnValue only if the caller " +
 			"genuinely needs the plaintext back: a returned value is written into this session's transcript. To store a " +
 			"value that already exists on disk, use the local sneakers-put command instead of passing it here. " + neverRotateHint +
 			" " + selectOptionsHint(),

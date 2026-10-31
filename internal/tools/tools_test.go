@@ -350,7 +350,7 @@ func listRegisteredTools(t *testing.T) []*mcp.Tool {
 	return res.Tools
 }
 
-func TestRegisterExposesExactlyTheTwentyThreeTools(t *testing.T) {
+func TestRegisterExposesExactlyTheTwentyFourTools(t *testing.T) {
 	var names []string
 	readOnly := map[string]bool{}
 	for _, tl := range listRegisteredTools(t) {
@@ -359,7 +359,7 @@ func TestRegisterExposesExactlyTheTwentyThreeTools(t *testing.T) {
 	}
 	slices.Sort(names)
 	want := []string{"sneakers_attach_secret_target", "sneakers_change_secret_type", "sneakers_create_folder", "sneakers_create_secret",
-		"sneakers_detach_secret_target", "sneakers_find_secrets", "sneakers_generate_secret",
+		"sneakers_detach_secret_target", "sneakers_find_secrets", "sneakers_generate_secret", "sneakers_generate_ssh_key",
 		"sneakers_get_secret", "sneakers_list_connections", "sneakers_list_folders", "sneakers_list_secret_types", "sneakers_list_targets",
 		"sneakers_move_secret", "sneakers_redeem_reveal", "sneakers_rename_folder", "sneakers_rename_secret", "sneakers_restore_secret_version",
 		"sneakers_rotate_secret", "sneakers_save_target",
@@ -370,7 +370,7 @@ func TestRegisterExposesExactlyTheTwentyThreeTools(t *testing.T) {
 	wantReadOnly := map[string]bool{
 		"sneakers_find_secrets": true, "sneakers_get_secret": true, "sneakers_list_folders": true, "sneakers_list_secret_types": true,
 		"sneakers_list_connections": true, "sneakers_list_targets": true,
-		"sneakers_create_secret": false, "sneakers_generate_secret": false, "sneakers_save_target": false, "sneakers_set_secret_target": false,
+		"sneakers_create_secret": false, "sneakers_generate_secret": false, "sneakers_generate_ssh_key": false, "sneakers_save_target": false, "sneakers_set_secret_target": false,
 		"sneakers_attach_secret_target": false, "sneakers_detach_secret_target": false,
 		"sneakers_rotate_secret": false, "sneakers_restore_secret_version": false,
 		"sneakers_rename_secret": false, "sneakers_create_folder": false, "sneakers_rename_folder": false,

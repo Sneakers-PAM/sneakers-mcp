@@ -61,6 +61,7 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. |
 | `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. A secret that names you goes to your Personal folder unless `keepFolder` is true; see [Placement](#placement). |
 | `sneakers_generate_secret` | write | A new secret with a policy-compliant generated password, returned only when `returnValue` is true. Same placement and `keepFolder` as create. |
+| `sneakers_generate_ssh_key` | write | A new SSH Key secret with a key pair made on the Sneakers side. Returns only the public key line and its SHA-256 fingerprint, never the private key. See [Generating an SSH key](#generating-an-ssh-key). |
 | `sneakers_update_secret` | write | Sets non-sensitive fields of an existing secret. See [sneakers-update-secret.md](sneakers-update-secret.md). |
 | `sneakers_move_secret` | destructive | Moves a secret to another folder, which changes who can reach it. Author on both folders; never into a personal folder. |
 | `sneakers_change_secret_type` | destructive | Re-keys a secret into another type. Never drops a value: one with no field in the new type is appended to its notes field as `[moved from <key>]: <JSON string>`, or the call fails. The result's `automation` says what happened to rotation, heartbeat and the target. |
@@ -168,6 +169,33 @@ so, not a missing-role message. Before the call leaves the MCP server, more than
 16 keys, an empty or over-long entry, or a private key is refused, and the error names the entry
 by position only. Results show pins as `hostKeyFingerprints` (as `ssh-keygen -l` prints them),
 never the keys; an empty list means the target isn't pinned.
+
+### Generating an SSH key
+
+`sneakers_generate_ssh_key` makes an SSH key pair inside the MCP server and stores it as a new SSH
+Key secret in one call, so the private key never passes through the agent or its transcript.
+
+| Argument | |
+|---|---|
+| `folderId`, `name` | Required, as for `sneakers_create_secret`. |
+| `keyFormat` | `Ed25519` (the default), `RSA 4096`, `RSA 2048` or `ECDSA P-256`, the SSH Key type's options. |
+| `comment` | Ends the public key line, such as `deploy@build-01`. One line. |
+| `username` | Stored in the type's `username` field. One line. |
+| `typeId` | Default `type-ssh-key`. Another type must declare `privateKey` and `publicKey` fields, or the call is refused before a key is made. |
+| `targetId`, `disableRotation`, `disableHeartbeat`, `keepFolder` | As for `sneakers_create_secret`. |
+
+It stores the same fields the web's key pair generator fills: `privateKey` (an unencrypted
+OpenSSH private key), `publicKey` (the `authorized_keys` line), `keyFormat` and `username`, so a key
+made either way is the same kind of secret. The key comes from `crypto/rand` the same way the
+vault's own generator makes it. The result has the secret's summary and placement, `publicKey`,
+`fingerprint` (`SHA256:...`, as `ssh-keygen -l` prints it) and `keyFormat`, never the private key.
+Install the public key line on the hosts the key signs in to. A person reads the private key on the
+web, and `sneakers-run -field privateKey -inject file` hands it to a command.
+
+The vault audits the call as a secret creation by the token's user or service account, and needs
+author access to the folder. The MCP server's log line names the tool, the subject and the outcome
+only; at `debug` it adds the key format and the public fingerprint. If the gateway's error ever
+quoted the key, the agent gets a fixed message instead.
 
 ### The SSH broker
 
