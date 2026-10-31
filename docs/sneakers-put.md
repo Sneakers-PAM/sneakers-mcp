@@ -106,6 +106,52 @@ forward carries its redirect back to the box's `127.0.0.1`.
 The port changes on every sign-in, so use the one this run printed. The link only works for about
 ten minutes, the same as any `login`.
 
+## A new appliance's own certificate
+
+A new appliance serves Sneakers on 443 with its own self-signed certificate until an owner uploads
+one on the :8443 Certificates page. No system trusts that certificate, so `login` and every other
+call fail the TLS handshake. Give the commands that certificate with `-ca-file <pem>` or
+`SNEAKERS_CA_FILE`, and they trust it on top of the system's roots, for the sign-in, the token
+exchange and the API alike. Nothing turns certificate checking off: the certificate must still
+match the host name in `SNEAKERS_URL`, and a box that presents any other certificate is refused.
+
+### Before you start
+
+- `openssl` on this machine (macOS ships LibreSSL's, which works the same here).
+- You can sign in to the box's :8443 admin page.
+
+1. Fetch the certificate the box serves on 443:
+
+   ```sh
+   mkdir -p ~/.config/sneakers
+   openssl s_client -connect sneakers.example.org:443 -servername sneakers.example.org </dev/null 2>/dev/null \
+     | openssl x509 -outform PEM > ~/.config/sneakers/box.pem
+   ```
+
+2. Print its SHA-256 fingerprint:
+
+   ```sh
+   openssl x509 -in ~/.config/sneakers/box.pem -noout -fingerprint -sha256
+   ```
+
+3. On the :8443 Certificates page, compare it with the fingerprint shown for **Product (443)**.
+   They must match exactly. If they don't, something between you and the box answered instead:
+   don't use the file.
+
+4. Point the commands at it, for this run with `-ca-file` or for every run with the variable:
+
+   ```sh
+   export SNEAKERS_URL=https://sneakers.example.org
+   export SNEAKERS_CA_FILE=~/.config/sneakers/box.pem
+   sneakers-put login
+   ```
+
+`-ca-file` wins over `SNEAKERS_CA_FILE`. The file may hold several PEM certificates, such as a
+private CA's root and the box's own; each one is trusted. A file that can't be read, holds no
+certificate or also holds a private key is refused before any request is made. Once the box has a
+certificate from a CA your system trusts, unset `SNEAKERS_CA_FILE`. When the box's own
+certificate is renewed, fetch and check it again.
+
 ## Fields
 
 Each `-field` is one of:
@@ -149,6 +195,10 @@ supplied from a file or stdin, that value is replaced with `[redacted]`.
   must be a personal token (`snk_u_...`). Service-account tokens are refused.
 - `SNEAKERS_URL` must be `https://`. Plain `http://` is accepted only for
   localhost with `-insecure-localhost`, for testing against a local gateway.
+- The gateway's certificate is checked against the system's roots, plus the
+  certificates in `-ca-file` or `SNEAKERS_CA_FILE` when one is given (see
+  [A new appliance's own certificate](#a-new-appliances-own-certificate)).
+  There's no way to skip the check.
 - Access is checked by the gateway and vault as for the UI: author rights on
   the folder for a create, on the secret for an update. Both are audited as
   you.

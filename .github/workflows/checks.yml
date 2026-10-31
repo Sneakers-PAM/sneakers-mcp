@@ -22,8 +22,10 @@ jobs:
     uses: Sneakers-PAM/.github/.github/workflows/scrub.yml@main
     with:
       # gonum.org: a public Go module host that appears in go.sum.
+      # sslmate.com: the same, for go-pkcs12 under go-certkit.
       allowed-domains: >-
         gonum.org
+        sslmate.com
   proto-sync:
     if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
     permissions:

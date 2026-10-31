@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	certkit "github.com/Bugs5382/go-certkit"
+
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/cliauth"
 )
 
@@ -50,6 +52,16 @@ type landing struct {
 }
 
 func newGateway(t *testing.T) *gateway {
+	return startGateway(t, (*httptest.Server).Start)
+}
+
+// newTLSGateway is the gateway on localhost over HTTPS with box's
+// certificate, as a new appliance serves it.
+func newTLSGateway(t *testing.T, box certkit.Bundle) *gateway {
+	return startGateway(t, func(srv *httptest.Server) { startBox(t, srv, box) })
+}
+
+func startGateway(t *testing.T, start func(*httptest.Server)) *gateway {
 	g := &gateway{t: t, token: "snk_u_" + strings.Repeat("A", 43), landed: make(chan landing, 1)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", g.metadata)
@@ -57,7 +69,8 @@ func newGateway(t *testing.T) *gateway {
 	mux.HandleFunc("GET /oauth2/authorize", g.authorize)
 	mux.HandleFunc("POST /oauth2/token", g.exchange)
 	mux.HandleFunc("GET /cli/signed-in", g.land)
-	g.srv = httptest.NewServer(mux)
+	g.srv = httptest.NewUnstartedServer(mux)
+	start(g.srv)
 	t.Cleanup(g.srv.Close)
 	return g
 }
@@ -155,10 +168,16 @@ func (g *gateway) landedOn(t *testing.T) landing {
 // browser follows the authorize URL the way a browser would, redirects
 // included, so the loopback listener gets the callback.
 func browser(t *testing.T, opened *string) func(string) {
+	return browserWith(t, http.DefaultClient, opened)
+}
+
+// browserWith is browser with hc, such as one that trusts a box's own
+// certificate the way a person's browser does once they accept it.
+func browserWith(t *testing.T, hc *http.Client, opened *string) func(string) {
 	return func(u string) {
 		*opened = u
 		go func() {
-			resp, err := http.Get(u) // #nosec G107 -- the test's own authorize URL
+			resp, err := hc.Get(u) // #nosec G107 -- the test's own authorize URL
 			if err != nil {
 				t.Errorf("the browser couldn't follow %s: %v", u, err)
 				return

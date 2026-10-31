@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -35,6 +36,7 @@ var tokenStore = cliauth.DefaultStore()
 
 type config struct {
 	endpoint string
+	hc       *http.Client
 	req      secretput.Request
 }
 
@@ -68,6 +70,8 @@ Flags:
   -keep-folder          create: use -folder even when the secret names you
   -id <id>              update: id of the secret to update
   -field <spec>         a field to set; repeatable, at least one
+  -ca-file <pem>        also trust the certificates in this PEM file for
+                        SNEAKERS_URL, such as a new appliance's own
   -insecure-localhost   allow an http:// SNEAKERS_URL on localhost (testing only)
   -h, -help             print this help
 
@@ -81,6 +85,8 @@ Environment:
   SNEAKERS_URL     Sneakers base URL; must be https://
   SNEAKERS_TOKEN   a personal token (snk_u_...) to use instead of the one
                    sneakers-put login stored
+  SNEAKERS_CA_FILE PEM file of extra certificates to trust, used when
+                   -ca-file isn't given
   BROWSER          browser login opens the sign-in in (else xdg-open or open)
 
 Examples:
@@ -91,7 +97,7 @@ Examples:
 `
 
 type flags struct {
-	folder, typ, name, id          *string
+	folder, typ, name, id, caFile  *string
 	disableRotation, insecureLocal *bool
 	keepFolder                     *bool
 	raw                            *rawFields
@@ -108,6 +114,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		disableRotation: fs.Bool("disable-rotation", false, "create: turn rotation off"),
 		keepFolder:      fs.Bool("keep-folder", false, "create: keep -folder even when the secret names you"),
 		insecureLocal:   fs.Bool("insecure-localhost", false, "allow http:// to localhost (testing only)"),
+		caFile:          fs.String("ca-file", "", "PEM file of extra roots to trust for SNEAKERS_URL"),
 		raw:             &rawFields{},
 	}
 	fs.Var(f.raw, "field", "key=@file, key=- (stdin) or key=value (non-secret fields only); repeatable")
@@ -140,7 +147,11 @@ func parse(args []string, getenv func(string) string) (config, error) {
 	if err := secretput.CheckSpecs(specs); err != nil {
 		return config{}, err
 	}
-	return config{endpoint: endpoint, req: secretput.Request{
+	hc, err := cliauth.HTTPClient(cliauth.CAFile(*f.caFile, getenv))
+	if err != nil {
+		return config{}, err
+	}
+	return config{endpoint: endpoint, hc: hc, req: secretput.Request{
 		Token: token, FolderID: *f.folder, TypeID: *f.typ, Name: *f.name, DisableRotation: *f.disableRotation, KeepFolder: *f.keepFolder,
 		SecretID: *f.id, Fields: specs,
 	}}, nil
@@ -180,7 +191,7 @@ func run(args []string, getenv func(string) string, stdin io.Reader, stdout, std
 	c.req.Stdin = stdin
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	res, err := secretput.Put(ctx, gwclient.New(c.endpoint, nil), c.req)
+	res, err := secretput.Put(ctx, gwclient.New(c.endpoint, c.hc), c.req)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "sneakers-put:", err)
 		return 1
