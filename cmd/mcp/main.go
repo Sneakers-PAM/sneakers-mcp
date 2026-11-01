@@ -33,6 +33,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/authn"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/gwclient"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/hydra"
+	"github.com/Sneakers-PAM/sneakers-mcp/internal/telemetry"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/tools"
 )
 
@@ -53,14 +54,18 @@ func env(k, def string) string {
 }
 
 type config struct {
-	HTTPPort      string
-	OTLPEndpoint  string
-	HydraIssuer   string
-	HydraJWKSURL  string
-	HydraAudience string
-	ResourceURL   string
-	GatewayURL    string
-	Version       string
+	HTTPPort     string
+	OTLPEndpoint string
+	// OTLPInsecureSkipVerify and OTLPLogsEnabled are the export switches; see
+	// the telemetry package.
+	OTLPInsecureSkipVerify bool
+	OTLPLogsEnabled        bool
+	HydraIssuer            string
+	HydraJWKSURL           string
+	HydraAudience          string
+	ResourceURL            string
+	GatewayURL             string
+	Version                string
 	// AcceptAPITokens enables the service-account API-token path.
 	AcceptAPITokens bool
 	// AuthorizationServer is the Sneakers sign-in issuer (the gateway's OAuth
@@ -82,13 +87,15 @@ func loadConfig() (config, error) {
 		HTTPPort: env("HTTP_PORT", "9101"),
 		// Empty means no collector: otel.Init runs without an exporter instead
 		// of retrying a default localhost address that is rarely there.
-		OTLPEndpoint:  env("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		HydraIssuer:   env("HYDRA_ISSUER", ""),
-		HydraJWKSURL:  env("HYDRA_JWKS_URL", "http://sneakers-hydra:4444/.well-known/jwks.json"),
-		HydraAudience: env("HYDRA_AUDIENCE", "sneakers-mcp"),
-		ResourceURL:   env("MCP_RESOURCE_URL", ""),
-		GatewayURL:    env("GATEWAY_MACHINE_GRAPHQL_URL", "http://sneakers-gateway:9100/machine/graphql"),
-		Version:       env("SERVICE_VERSION", buildinfo.Get().Version),
+		OTLPEndpoint:           env("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OTLPInsecureSkipVerify: telemetry.InsecureSkipVerify(),
+		OTLPLogsEnabled:        telemetry.LogsEnabled(),
+		HydraIssuer:            env("HYDRA_ISSUER", ""),
+		HydraJWKSURL:           env("HYDRA_JWKS_URL", "http://sneakers-hydra:4444/.well-known/jwks.json"),
+		HydraAudience:          env("HYDRA_AUDIENCE", "sneakers-mcp"),
+		ResourceURL:            env("MCP_RESOURCE_URL", ""),
+		GatewayURL:             env("GATEWAY_MACHINE_GRAPHQL_URL", "http://sneakers-gateway:9100/machine/graphql"),
+		Version:                env("SERVICE_VERSION", buildinfo.Get().Version),
 
 		AuthorizationServer: env("MCP_AUTHORIZATION_SERVER", ""),
 	}
@@ -206,7 +213,7 @@ func buildHandler(ctx context.Context, cfg config, logger zerolog.Logger) (http.
 		&mcp.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: maxRequestBodyBytes},
 	)
 	mux := newMux(streamable, authMW, metadata)
-	checker, err := newHealthChecker(cfg, log.NewLogger(serviceName))
+	checker, err := newHealthChecker(cfg, log.NewLoggerWithOptions(serviceName, telemetry.LogOptions(cfg.OTLPLogsEnabled)...))
 	if err != nil {
 		return nil, err
 	}
@@ -269,14 +276,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger := log.New(serviceName)
+	logger := telemetry.NewLogger(serviceName, telemetry.LogsEnabled())
+	telemetry.InstallErrorHandler(logger.Output(os.Stdout))
 
 	cfg, err := loadConfig()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("config")
 	}
 
-	otelShutdown, err := otel.Init(ctx, serviceName, cfg.OTLPEndpoint)
+	otelShutdown, err := otel.InitWithOptions(ctx, serviceName, cfg.OTLPEndpoint, telemetry.InitOptions(cfg.OTLPInsecureSkipVerify, cfg.OTLPLogsEnabled)...)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("otel init")
 	}

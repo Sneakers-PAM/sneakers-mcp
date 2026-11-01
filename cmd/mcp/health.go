@@ -10,12 +10,15 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Bugs5382/go-buildinfo/health"
 	"github.com/Bugs5382/go-buildinfo/httpbuildinfo"
 	log "github.com/Bugs5382/go-log"
+	otel "github.com/Bugs5382/go-otel"
+	"github.com/Sneakers-PAM/sneakers-mcp/internal/telemetry"
 )
 
 // headerPrefix starts the build and dependency headers /readyz and /livez
@@ -34,6 +37,8 @@ const (
 // the server can't do anything. It's checked at the gateway's own /readyz,
 // never with a token. Hydra's JWKS verifies the Hydra bearer: required when
 // that is the only bearer mode, optional (degraded) when API tokens still work.
+// otlp is optional and listed only with an endpoint: losing telemetry never
+// stops the server.
 // opts follow the defaults, so a test can shorten the TTL. /readyz only reads
 // the checker's cache: buildHandler runs the checks in the background once per
 // cacheTTL, so a slow gateway /readyz never makes this probe wait.
@@ -42,6 +47,9 @@ func newHealthChecker(cfg config, lg log.Logger, opts ...health.Option) (*health
 	deps := []health.Dependency{{Name: "gateway", Required: true, Check: checkHTTP(httpc, originOf(cfg.GatewayURL)+"/readyz")}}
 	if cfg.hydraEnabled() {
 		deps = append(deps, health.Dependency{Name: "hydra-jwks", Required: !cfg.AcceptAPITokens, Check: checkHTTP(httpc, cfg.HydraJWKSURL)})
+	}
+	if strings.TrimSpace(cfg.OTLPEndpoint) != "" {
+		deps = append(deps, health.Dependency{Name: "otlp", Check: telemetry.ExportCheck(otel.ExportState, cfg.OTLPLogsEnabled)})
 	}
 	c := health.New(append([]health.Option{health.WithBackgroundRefresh(), health.WithTTL(cacheTTL), health.WithTimeout(checkTimeout), health.WithLogger(lg)}, opts...)...)
 	return c, c.Register(deps...)
