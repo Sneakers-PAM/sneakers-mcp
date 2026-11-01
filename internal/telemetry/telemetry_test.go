@@ -4,9 +4,7 @@
 package telemetry_test
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"net"
 	"slices"
 	"strings"
@@ -17,7 +15,6 @@ import (
 	otelhelper "github.com/Bugs5382/go-otel"
 	"github.com/Sneakers-PAM/sneakers-mcp/internal/telemetry"
 	"github.com/rs/zerolog"
-	"go.opentelemetry.io/otel"
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -81,8 +78,8 @@ func exportLine(t *testing.T, write func(zerolog.Logger)) string {
 func TestLogExport_UnallowedFieldsNeverReachTheCollector(t *testing.T) {
 	got := exportLine(t, func(l zerolog.Logger) {
 		l.Info().
-			Str("tool", "sneakers_get_secret").Str("outcome", "ok").Dur("dur", time.Second).
-			Str("sub", canary).Str("run", canary).Str("secret_id", canary).Str("format", canary).
+			Str("tool", "sneakers_get_secret").Str("tool_status", "ok").Dur("dur", time.Second).
+			Str("sub", canary).Str("outcome", canary).Str("method", canary).Str("run", canary).Str("secret_id", canary).Str("format", canary).
 			Str("path", "/mcp?"+canary).Str("reason", canary).Str("error", canary).
 			Str("issuer", canary).Str("gateway", canary).Str("args", canary).
 			Msg("mcp tool call")
@@ -98,7 +95,7 @@ func TestLogExport_UnallowedFieldsNeverReachTheCollector(t *testing.T) {
 func TestLogExport_TokenShapeIsRedactedInAnAllowedField(t *testing.T) {
 	token := "snk_" + "abc123_DEF-456"
 	got := exportLine(t, func(l zerolog.Logger) {
-		l.Warn().Str("outcome", "bad "+token).Msg("mcp tool call")
+		l.Warn().Str("tool_status", "bad "+token).Msg("mcp tool call")
 	})
 	if !strings.Contains(got, "mcp tool call") {
 		t.Fatalf("the line never arrived: %s", got)
@@ -117,7 +114,7 @@ func TestLogExport_DebugNeverLeaves(t *testing.T) {
 }
 
 func TestLogFields_HoldNothingThatCarriesAValue(t *testing.T) {
-	for _, f := range []string{"sub", "run", "secret_id", "format", "fingerprint", "path", "reason", "error", "issuer", "audience", "resource", "gateway", "http"} {
+	for _, f := range []string{"outcome", "method", "sub", "run", "secret_id", "format", "fingerprint", "path", "reason", "error", "issuer", "audience", "resource", "gateway", "http"} {
 		if slices.Contains(telemetry.LogFields, f) {
 			t.Errorf("%q must stay off the allow-list", f)
 		}
@@ -168,20 +165,5 @@ func TestExportCheck(t *testing.T) {
 		if err != nil && strings.Contains(err.Error(), "example.test") {
 			t.Errorf("%s: the error carries export text: %v", name, err)
 		}
-	}
-}
-
-func TestErrorHandler_LeavesOutTheErrorText(t *testing.T) {
-	prev := otel.GetErrorHandler()
-	t.Cleanup(func() { otel.SetErrorHandler(prev) })
-	var buf bytes.Buffer
-	telemetry.InstallErrorHandler(zerolog.New(&buf))
-	otel.Handle(errors.New("dial collector.example.test:4317 authorization=" + canary))
-	got := buf.String()
-	if !strings.Contains(got, "otlp export failed") {
-		t.Fatalf("no line: %q", got)
-	}
-	if strings.Contains(got, canary) || strings.Contains(got, "example.test") {
-		t.Fatalf("export text reached the log: %q", got)
 	}
 }

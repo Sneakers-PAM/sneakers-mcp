@@ -277,7 +277,6 @@ func main() {
 	defer stop()
 
 	logger := telemetry.NewLogger(serviceName, telemetry.LogsEnabled())
-	telemetry.InstallErrorHandler(logger.Output(os.Stdout))
 
 	cfg, err := loadConfig()
 	if err != nil {

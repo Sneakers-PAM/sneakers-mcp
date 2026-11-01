@@ -385,6 +385,11 @@ func TestHealth_FailingCollectorDegradesAndStaysReady(t *testing.T) {
 	flush, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_ = shutdown(flush)
+	// shutdown can return at its deadline just before the exporter's failure is
+	// recorded.
+	for deadline := time.Now().Add(5 * time.Second); otel.ExportState().Logs.LastErrorAt.IsZero() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	cfg := config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true, OTLPEndpoint: endpoint, OTLPLogsEnabled: true}
 	code, r := probe(t, healthMux(t, testChecker(t, cfg)), "/readyz")

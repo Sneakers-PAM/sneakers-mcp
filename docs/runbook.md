@@ -74,16 +74,16 @@ JSON on stdout by default. The lines to know:
 | Message | Fields | Meaning |
 |---|---|---|
 | `http` | `method`, `path`, `status`, `dur` | One per request, except `/livez` and `/readyz`. Never headers or bodies. |
-| `mcp tool call` | `tool`, `sub`, `outcome`, `dur` | One per tool call. Never arguments or results. |
+| `mcp tool call` | `tool`, `sub`, `tool_status`, `dur` | One per tool call. Never arguments or results. |
 | `mcp bearer rejected` | `reason`, `path` | A bearer was refused (warn). The reason names the check that failed, never the token. |
 
-A failed OTLP export logs `otlp export failed` at warn on stdout, without the error text, and is never exported itself.
+A failed OTLP export prints one line on stderr with the gRPC code only, at most every 30 seconds, and is never exported itself.
 
 At start the OpenTelemetry SDK, which also reads `OTEL_EXPORTER_OTLP_ENDPOINT`, prints two
 plain-text `parse url` lines when it holds the `host:port` form; export still works. Set the URL
 form (`http://collector:4317`) and they go away.
 
-`outcome` is `ok`, `unauthenticated`, `invalid_input`, `gateway_denied_or_failed` (a GraphQL error,
+`tool_status` is `ok`, `unauthenticated`, `invalid_input`, `gateway_denied_or_failed` (a GraphQL error,
 such as a RACI denial), `gateway_http_<status>` or `error` (the gateway couldn't be reached or gave
 an unusable answer). `sub` is the Ory Hydra subject, or the token label described in
 [configuration.md](configuration.md).

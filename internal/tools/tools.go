@@ -94,7 +94,7 @@ func (t *toolset) run(req *mcp.CallToolRequest, tool string, validate func() err
 			err = toolError(call(token))
 		}
 	}
-	t.log.Info().Str("tool", tool).Str("sub", sub).Str("outcome", outcome(err)).
+	t.log.Info().Str("tool", tool).Str("sub", sub).Str("tool_status", outcome(err)).
 		Dur("dur", time.Since(start)).Msg("mcp tool call")
 	return err
 }
@@ -476,7 +476,7 @@ func checkRunID(id string) error {
 func (t *toolset) runPending(ctx context.Context, token, runID string, use gwclient.SecretUse) []pendingUse {
 	uses, err := t.gw.SecretUseRun(ctx, token, runID)
 	if err != nil {
-		t.log.Warn().Str("tool", toolGet).Str("run", runID).Str("outcome", outcome(err)).
+		t.log.Warn().Str("tool", toolGet).Str("run", runID).Str("tool_status", outcome(err)).
 			Msg("could not list the run's pending uses; reporting only this one")
 		uses = nil
 	}

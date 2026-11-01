@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package telemetry holds what leaves the server over OTLP: the switches, the
-// log filters, the export error handler and the health check.
+// log and telemetry filters and the health check.
 package telemetry
 
 import (
@@ -16,24 +16,31 @@ import (
 	log "github.com/Bugs5382/go-log"
 	otelhelper "github.com/Bugs5382/go-otel"
 	"github.com/rs/zerolog"
-	"go.opentelemetry.io/otel"
 )
 
 // LogFields are the only log fields that may be exported. Export is
 // default-deny, so a new field stays local until it is added here. A field
 // holding anything a caller or a target system supplied stays off: sub (a
 // Hydra subject or a token label), run, secret_id and format (tool arguments),
-// path, reason, error, and the configured URLs and names.
+// method (a client can send any token), path, reason, error, and the
+// configured URLs and names. tool_status is a closed set of classes from
+// tools.go. The name outcome stays off: go-workload-identity fills it with
+// error text in the other services.
 var LogFields = []string{
 	// http
-	"method", "status", "dur",
+	"status", "dur",
 	// mcp tool call
-	"tool", "outcome",
+	"tool", "tool_status",
 	// mcp starting
 	"hydra", "api_tokens",
 	// go-buildinfo's dependency state changes
 	"dependency", "required", "from", "to", "error_class",
 }
+
+// MetricAttributes are the attributes otel.Metrics records. The server has no
+// spans of its own and only service.name leaves on the resource, so the trace
+// and resource allow-lists stay empty.
+var MetricAttributes = []string{"http.request.method", "http.route", "http.response.status_code"}
 
 var redactPatterns = []*regexp.Regexp{regexp.MustCompile(`\bsnk_[A-Za-z0-9_\-]+`)}
 
@@ -46,6 +53,9 @@ func LogsEnabled() bool { return os.Getenv("OTLP_LOGS_ENABLED") == "true" }
 // InitOptions are the options for otel.InitWithOptions.
 func InitOptions(skipVerify, logs bool) []otelhelper.Option {
 	return []otelhelper.Option{
+		otelhelper.WithTelemetryFilter(true),
+		otelhelper.WithBaggage(false),
+		otelhelper.WithMetricAllowAttributes(MetricAttributes...),
 		otelhelper.WithInsecureSkipVerify(skipVerify),
 		otelhelper.WithLogs(logs),
 		otelhelper.WithLogAllowFields(LogFields...),
@@ -68,16 +78,6 @@ func LogOptions(logs bool) []log.Option {
 func NewLogger(service string, logs bool) zerolog.Logger {
 	log.NewLoggerWithOptions(service, LogOptions(logs)...)
 	return log.Ctx(context.Background()) //nolint:staticcheck // no other way to a zerolog logger with options
-}
-
-// InstallErrorHandler sends OpenTelemetry's errors to local in place of raw
-// text on stderr. The error is left out because it can name the endpoint and
-// headers. Pass a logger that writes to stdout only: exported, each failed
-// export would queue a record that feeds the next one.
-func InstallErrorHandler(local zerolog.Logger) {
-	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(error) {
-		local.Warn().Msg("otlp export failed")
-	}))
 }
 
 var errExportFailing = errors.New("otlp export failing")
