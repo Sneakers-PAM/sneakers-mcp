@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -18,6 +19,8 @@ import (
 	buildinfo "github.com/Bugs5382/go-buildinfo"
 	"github.com/Bugs5382/go-buildinfo/health"
 	log "github.com/Bugs5382/go-log"
+	otel "github.com/Bugs5382/go-otel"
+	"github.com/Sneakers-PAM/sneakers-mcp/internal/telemetry"
 	"github.com/rs/zerolog"
 )
 
@@ -347,6 +350,51 @@ func TestHealth_HTTPCheckAgainstAStoppedServer(t *testing.T) {
 	srv.Close()
 	if got := class(); got != "refused" {
 		t.Fatalf("stopped server class = %q, want refused", got)
+	}
+}
+
+func TestHealth_OTLPListedOnlyWithAnEndpoint(t *testing.T) {
+	f := newFakeDeps(t)
+	base := config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true}
+	if _, r := probe(t, healthMux(t, testChecker(t, base)), "/readyz"); depByName(r, "otlp").Name != "" {
+		t.Fatalf("no endpoint, want no otlp dependency: %+v", r.Dependencies)
+	}
+	base.OTLPEndpoint = "http://collector.example.test:4317"
+	_, r := probe(t, healthMux(t, testChecker(t, base)), "/readyz")
+	if d := depByName(r, "otlp"); d.Name == "" || d.Required {
+		t.Fatalf("with an endpoint, want an optional otlp dependency: %+v", r.Dependencies)
+	}
+}
+
+// A real export to a collector that isn't there: the flush fails, and that
+// degrades /readyz without failing it.
+func TestHealth_FailingCollectorDegradesAndStaysReady(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "http://" + lis.Addr().String()
+	_ = lis.Close()
+
+	f := newFakeDeps(t)
+	shutdown, err := otel.InitWithOptions(t.Context(), serviceName, endpoint, telemetry.InitOptions(false, true)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otel.LogWriter().Write([]byte(`{"level":"error","message":"boom"}` + "\n")) //nolint:errcheck // it always reports success
+	flush, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = shutdown(flush)
+	// shutdown can return at its deadline just before the exporter's failure is
+	// recorded.
+	for deadline := time.Now().Add(5 * time.Second); otel.ExportState().Logs.LastErrorAt.IsZero() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	cfg := config{GatewayURL: f.srv.URL + "/machine/graphql", AcceptAPITokens: true, OTLPEndpoint: endpoint, OTLPLogsEnabled: true}
+	code, r := probe(t, healthMux(t, testChecker(t, cfg)), "/readyz")
+	if d := depByName(r, "otlp"); code != http.StatusOK || !r.Ready || r.Status != health.StateDegraded || d.State != health.StateDegraded {
+		t.Fatalf("got %d %+v", code, r)
 	}
 }
 

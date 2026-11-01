@@ -23,6 +23,7 @@ reach the SSH broker service.
 - `internal/authn/` - classifies a bearer by shape and confirms API and personal tokens with the
   gateway, with a short positive cache keyed by the token's SHA-256.
 - `internal/hydra/` - the Ory Hydra JWT verifier (JWKS fetch and cache).
+- `internal/telemetry/` - what leaves over OTLP: the env switches, the log, metric and trace filters and redaction, and the `otlp` health check. A new log field exports nothing until it's on the list; anything a caller or target system supplied stays off it.
 - `internal/tools/` - the MCP tools; each is a thin mapping onto the gateway client. The one exception is `sneakers_generate_ssh_key`, which makes the key pair in process (`sshkey.go`) and stores it with `createSecretForPrincipal`; the private key is never logged or returned.
 - `internal/gwclient/` - the machine GraphQL client; every call takes the caller's token.
 - `internal/cliauth/` - the token and URL rules both commands share, and their `login`: the gateway's loopback and PKCE sign-in, with the token kept in the macOS Keychain, or on Linux in the Secret Service keyring when one is running and else a `0600` file under `$XDG_CONFIG_HOME/sneakers/` (CI's 🐧 Linux login job proves both in an Ubuntu container), and the HTTP client every call to `SNEAKERS_URL` uses, which trusts the certificates in `SNEAKERS_CA_FILE` (or `-ca-file`) on top of the system's roots and never skips verification.
