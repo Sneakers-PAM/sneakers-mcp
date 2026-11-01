@@ -57,6 +57,7 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_find_secrets` | read | Secrets the caller may read, by name substring, folder or type. Metadata only, never values. |
 | `sneakers_list_folders` | read | Folders the caller may read, with path and `canAuthor`. |
 | `sneakers_list_secret_types` | read | The type catalog: ids and fields (kind, required, sensitive). |
+| `sneakers_list_extension_packs` | read | The extension packs that can be activated: catalogued types that aren't installed yet, with ids and fields. |
 | `sneakers_get_secret` | read | One field of one secret. A non-sensitive field is audited as a read, a sensitive one as a reveal. When the secret needs approval for each personal-token reveal, it returns `approvalRequired`, an `approvalUrl`, a `useId`, a `runId` and the run's `pending` list instead of a value. Optional `runId` and `task` group one task's requests on one approval page. |
 | `sneakers_redeem_reveal` | read | Collects a personal token's approved reveal by `useId`, once, within 60 seconds of approval; returns the `approvalUrl` again while it's pending. Comes back with the same `secret` summary as `sneakers_get_secret`. |
 | `sneakers_create_secret` | write | A new secret with caller-supplied values. Optional `disableRotation` and `disableHeartbeat`. A secret that names you goes to your Personal folder unless `keepFolder` is true; see [Placement](#placement). |
@@ -68,6 +69,7 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_rename_secret` | write | The name only; values are never read or returned. |
 | `sneakers_create_folder` | write | A folder under a parent the caller can author, or, with `parentId` left out, a top-level folder owned by the token's user. Never inside another user's personal tree. See [Top-level folders](#top-level-folders). |
 | `sneakers_rename_folder` | write | A folder the caller can author, including in their own personal tree. |
+| `sneakers_import_extension_pack` | write | Activates a catalogued extension pack by id, for everyone. Only for a token whose user is a site admin or root. See [Extension packs](#extension-packs). |
 | `sneakers_set_secret_automation` | write | Turns rotation and heartbeat off or on; both flags are set on every call. Turning heartbeat back on is refused, naming what's missing, unless the secret has a target with a connection and, for SSH Key, a pinned host key. |
 | `sneakers_list_connections` | read | The connection profiles (protocol, port, TLS) a target can bind to. |
 | `sneakers_list_targets` | read | Shared targets and the caller's own, each with `hostKeyFingerprints`: the SHA256 fingerprints of its pinned SSH host keys. |
@@ -80,6 +82,15 @@ commit, run `scripts/vault-catalogue-fetch.sh` (it needs `jq`) and commit the fi
 | `sneakers_test_secret` | check | Checks the stored credential against its target through a connector: ok, failed (with the reason), unreachable, or untrusted_certificate (the target answered, but its TLS certificate failed verification; `detail` says why and no credential was sent), never a value. |
 
 Names may not contain `/`, because folder paths are joined with it.
+
+### Extension packs
+
+Anyone using the MCP can list the packs with `sneakers_list_extension_packs`. `sneakers_import_extension_pack` activates one by its id, and the new type shows in `sneakers_list_secret_types` for everyone.
+
+- **Who can activate:** a personal token whose user is a site admin or root. Any other token or service account gets `PERMISSION_DENIED` with reason `NOT_SITE_ADMIN`, and the refusal is audited.
+- **The audit log:** each activation is recorded in the audit tier with the user, the pack and the source, `mcp` for an MCP agent token. A personal token made for something else (`cli`, for instance) shows `machine_api` even through this server, because the source comes from what identity recorded for the token. If the record can't be written, the pack isn't activated.
+- **Only catalogued packs:** a pack that isn't in the catalogue is `NOT_FOUND`, one already installed is `ALREADY_EXISTS`, and pasted JSON isn't accepted.
+- **Maintenance:** read-only mode refuses activation; listing stays open.
 
 ### Top-level folders
 

@@ -349,11 +349,7 @@ func (t *toolset) listSecretTypes(ctx context.Context, req *mcp.CallToolRequest,
 		func(token string) error {
 			types, err := t.gw.ListSecretTypes(ctx, token)
 			for _, ty := range types {
-				to := secretTypeOut{ID: ty.ID, Name: ty.Name, Fields: make([]typeFieldOut, 0, len(ty.Fields))}
-				for _, f := range ty.Fields {
-					to.Fields = append(to.Fields, typeFieldOut{Key: f.Key, Label: f.Label, Kind: f.Kind, Required: f.Required, Sensitive: f.Sensitive})
-				}
-				out.Types = append(out.Types, to)
+				out.Types = append(out.Types, secretTypeOutOf(ty))
 			}
 			return err
 		})
@@ -816,6 +812,7 @@ func Register(s *mcp.Server, gw *gwclient.Client, log zerolog.Logger) {
 	registerTargetTools(s, t)
 	registerCheckTool(s, t)
 	registerOrganizeTools(s, t)
+	registerExtensionTools(s, t)
 	registerAutomationTool(s, t)
 	registerUpdateTool(s, t)
 	registerRotateTools(s, t)

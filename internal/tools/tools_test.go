@@ -360,7 +360,7 @@ func TestRegisterExposesExactlyTheTwentyFourTools(t *testing.T) {
 	slices.Sort(names)
 	want := []string{"sneakers_attach_secret_target", "sneakers_change_secret_type", "sneakers_create_folder", "sneakers_create_secret",
 		"sneakers_detach_secret_target", "sneakers_find_secrets", "sneakers_generate_secret", "sneakers_generate_ssh_key",
-		"sneakers_get_secret", "sneakers_list_connections", "sneakers_list_folders", "sneakers_list_secret_types", "sneakers_list_targets",
+		"sneakers_get_secret", "sneakers_import_extension_pack", "sneakers_list_connections", "sneakers_list_extension_packs", "sneakers_list_folders", "sneakers_list_secret_types", "sneakers_list_targets",
 		"sneakers_move_secret", "sneakers_redeem_reveal", "sneakers_rename_folder", "sneakers_rename_secret", "sneakers_restore_secret_version",
 		"sneakers_rotate_secret", "sneakers_save_target",
 		"sneakers_set_secret_automation", "sneakers_set_secret_target", "sneakers_test_secret", "sneakers_update_secret"}
@@ -369,12 +369,12 @@ func TestRegisterExposesExactlyTheTwentyFourTools(t *testing.T) {
 	}
 	wantReadOnly := map[string]bool{
 		"sneakers_find_secrets": true, "sneakers_get_secret": true, "sneakers_list_folders": true, "sneakers_list_secret_types": true,
-		"sneakers_list_connections": true, "sneakers_list_targets": true,
+		"sneakers_list_connections": true, "sneakers_list_targets": true, "sneakers_list_extension_packs": true,
 		"sneakers_create_secret": false, "sneakers_generate_secret": false, "sneakers_generate_ssh_key": false, "sneakers_save_target": false, "sneakers_set_secret_target": false,
 		"sneakers_attach_secret_target": false, "sneakers_detach_secret_target": false,
 		"sneakers_rotate_secret": false, "sneakers_restore_secret_version": false,
 		"sneakers_rename_secret": false, "sneakers_create_folder": false, "sneakers_rename_folder": false,
-		"sneakers_set_secret_automation": false, "sneakers_update_secret": false,
+		"sneakers_set_secret_automation": false, "sneakers_update_secret": false, "sneakers_import_extension_pack": false,
 	}
 	for name, want := range wantReadOnly {
 		if readOnly[name] != want {
