@@ -50,7 +50,7 @@ type SecretSummary {
   # RFC3339 of the last successful rotation and of the next scheduled one.
   rotatedAt: String
   nextRotationAt: String
-  # Last heartbeat outcome (OK, FAILED, UNREACHABLE, UNKNOWN); null = never checked.
+  # Last heartbeat outcome (OK, FAILED, UNREACHABLE, UNTRUSTED_CERTIFICATE, UNKNOWN); null = never checked.
   lastHeartbeatResult: String
   # Where createSecretForPrincipal / generateSecretForPrincipal stored the
   # secret and why; null on every other result.
@@ -282,8 +282,8 @@ input MachineTargetInput {
 }
 
 # The last credential check of a secret against its target. result is OK,
-# FAILED, UNREACHABLE or UNKNOWN; detail is the connector's reason, never a
-# value. pending: a check is due or running.
+# FAILED, UNREACHABLE, UNTRUSTED_CERTIFICATE or UNKNOWN; detail is the
+# connector's reason, never a value. pending: a check is due or running.
 type SecretCheckStatus {
   result: String!
   checkedAtUnix: Int!
@@ -328,6 +328,10 @@ type Query {
   # List the secret types in the vault catalog (built-in plus imported
   # extensions). The catalog holds no secret material.
   secretTypes: [SecretTypeSummary!]!
+
+  # List the catalogued extension packs that aren't installed yet, each ready
+  # for importExtension. Packs hold no secret material, so any caller may list.
+  availableExtensions: [SecretTypeSummary!]!
 
   # Poll a use this token prepared.
   secretUse(id: ID!): SecretUse!
@@ -408,6 +412,12 @@ type Mutation {
   # Rename a folder as the calling principal. Requires RACI-Author (R) on the
   # folder's chain. A sibling with the same name is refused.
   renameFolderForPrincipal(id: ID!, name: String!): PrincipalFolder!
+
+  # Activate a catalogued extension pack by id, as importExtension does in the
+  # web. Only a personal token whose owner is a site admin or root may: anyone
+  # else is refused with PERMISSION_DENIED (NOT_SITE_ADMIN), and the vault
+  # audits both outcomes. There's no pasted-JSON equivalent on this API.
+  importExtension(id: ID!): SecretTypeSummary!
 
   # Check the stored credential against its target now, through the connector.
   # At most once a minute per secret; returns the request time (unix). Poll
