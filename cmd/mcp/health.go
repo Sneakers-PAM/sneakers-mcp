@@ -44,7 +44,7 @@ const (
 // cacheTTL, so a slow gateway /readyz never makes this probe wait.
 func newHealthChecker(cfg config, lg log.Logger, opts ...health.Option) (*health.Checker, error) {
 	httpc := &http.Client{Timeout: checkTimeout}
-	deps := []health.Dependency{{Name: "gateway", Required: true, Check: checkHTTP(httpc, originOf(cfg.GatewayURL)+"/readyz")}}
+	deps := []health.Dependency{{Name: "gateway", Required: true, Check: checkHTTP(healthClient(cfg), originOf(cfg.GatewayURL)+"/readyz")}}
 	if cfg.hydraEnabled() {
 		deps = append(deps, health.Dependency{Name: "hydra-jwks", Required: !cfg.AcceptAPITokens, Check: checkHTTP(httpc, cfg.HydraJWKSURL)})
 	}
