@@ -74,6 +74,8 @@ type config struct {
 	// gatewayHTTP is the mutual-TLS client for the gateway (MTLS_CERT_FILE,
 	// MTLS_KEY_FILE, MTLS_CA_FILE); nil keeps the plaintext default.
 	gatewayHTTP *http.Client
+	// DisabledTools are the MCP functions turned off (MCP_DISABLED_TOOLS).
+	DisabledTools []string
 }
 
 // hydraEnabled reports whether the Hydra JWT path is on: exactly when an
@@ -108,6 +110,9 @@ func loadConfig() (config, error) {
 	}
 	cfg.AcceptAPITokens = accept
 	if cfg.gatewayHTTP, err = mtlsClient(); err != nil {
+		return cfg, err
+	}
+	if cfg.DisabledTools, err = tools.ParseDisabled(os.Getenv(tools.DisabledSetting)); err != nil {
 		return cfg, err
 	}
 	if !cfg.hydraEnabled() && !cfg.AcceptAPITokens {
@@ -213,6 +218,7 @@ func buildHandler(ctx context.Context, cfg config, logger zerolog.Logger) (http.
 		Version: cfg.Version,
 	}, nil)
 	tools.Register(mcpServer, gwclient.New(cfg.GatewayURL, cfg.gatewayHTTP), logger)
+	tools.Restrict(mcpServer, cfg.DisabledTools, logger)
 
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return mcpServer },
