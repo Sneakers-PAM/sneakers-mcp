@@ -178,7 +178,10 @@ func newHarnessWith(t *testing.T, mut func(*config)) *harness {
 		authz := r.Header.Get("Authorization")
 		h.gwMu.Lock()
 		isHealth := strings.Contains(string(body), "machineHealth")
-		if isHealth {
+		isSettings := strings.Contains(string(body), "disabledMcpTools")
+		if isSettings {
+			// The Disabled MCP tools fetch, not a tool call.
+		} else if isHealth {
 			h.health = append(h.health, authz)
 		} else {
 			h.gwAuths = append(h.gwAuths, authz)
@@ -193,6 +196,8 @@ func newHarnessWith(t *testing.T, mut func(*config)) *harness {
 			http.Error(w, "unavailable", st)
 		case opaqueRejected:
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		case isSettings:
+			_, _ = io.WriteString(w, `{"data":{"disabledMcpTools":[]}}`)
 		case isHealth:
 			_, _ = io.WriteString(w, `{"data":{"machineHealth":true}}`)
 		default:
@@ -209,6 +214,8 @@ func newHarnessWith(t *testing.T, mut func(*config)) *harness {
 		ResourceURL:   "https://mcp.example.org/mcp",
 		GatewayURL:    gw.URL,
 		Version:       "test",
+		// DisabledRefresh keeps the settings fetch to one per test run.
+		DisabledRefresh: time.Minute,
 		// AcceptAPITokens mirrors the production default.
 		AcceptAPITokens: true,
 	}
@@ -430,5 +437,21 @@ func TestLoadConfigDisabledTools(t *testing.T) {
 	t.Setenv("MCP_DISABLED_TOOLS", "sneakers_nope")
 	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "sneakers_nope") {
 		t.Fatalf("an unknown name must stop start-up naming it, got %v", err)
+	}
+}
+
+func TestLoadConfigDisabledRefresh(t *testing.T) {
+	t.Setenv("HYDRA_ISSUER", "")
+	t.Setenv("MCP_ACCEPT_API_TOKENS", "true")
+	t.Setenv("MCP_DISABLED_TOOLS_REFRESH", "")
+	cfg, err := loadConfig()
+	if err != nil || cfg.DisabledRefresh != 30*time.Second {
+		t.Fatalf("default: %v, %v", cfg.DisabledRefresh, err)
+	}
+	for _, bad := range []string{"soon", "0s", "2h"} {
+		t.Setenv("MCP_DISABLED_TOOLS_REFRESH", bad)
+		if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "MCP_DISABLED_TOOLS_REFRESH") {
+			t.Errorf("%q: want a start-up error naming the variable, got %v", bad, err)
+		}
 	}
 }

@@ -68,28 +68,28 @@ func ParseDisabled(csv string) ([]string, error) {
 	return out, nil
 }
 
-// Restrict turns the named tools off on s, in the server rather than the
-// page: tools/list leaves them out and tools/call refuses them, naming the
-// setting, before anything reaches the gateway.
+// Restrict turns the named tools off on s for good (the static list).
 func Restrict(s *mcp.Server, disabled []string, log zerolog.Logger) {
 	if len(disabled) == 0 {
 		return
 	}
-	off := make(map[string]bool, len(disabled))
-	for _, n := range disabled {
-		off[n] = true
-	}
-	log.Info().Strs("disabled", disabled).Msg("mcp functions turned off")
+	RestrictWith(s, NewSwitches(disabled, nil, 0, log), log)
+}
+
+// RestrictWith turns tools off on s as sw decides, per call, in the server
+// rather than the page: tools/list leaves them out and tools/call refuses
+// them, naming the setting, before anything reaches the gateway.
+func RestrictWith(s *mcp.Server, sw *Switches, log zerolog.Logger) {
+	log.Info().Int("static", len(sw.static)).Bool("from_gateway", sw.fetch != nil).Msg("mcp functions can be turned off")
 	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-			if method == "tools/call" {
-				if r, ok := req.(*mcp.CallToolRequest); ok && r.Params != nil && off[r.Params.Name] {
-					log.Warn().Str("tool", r.Params.Name).Msg("mcp call refused: function is turned off")
-					return &mcp.CallToolResult{
-						IsError: true,
-						Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("%s is turned off on this install (setting %s)", r.Params.Name, DisabledSetting)}},
-					}, nil
-				}
+			if method != "tools/call" && method != "tools/list" {
+				return next(ctx, method, req)
+			}
+			off := sw.Off(ctx, bearerOf(req))
+			if r, ok := req.(*mcp.CallToolRequest); ok && method == "tools/call" && r.Params != nil && off[r.Params.Name] {
+				log.Warn().Str("tool", r.Params.Name).Msg("mcp call refused: function is turned off")
+				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: toolRefusal(r.Params.Name)}}}, nil
 			}
 			res, err := next(ctx, method, req)
 			if lr, ok := res.(*mcp.ListToolsResult); ok && method == "tools/list" && err == nil {
@@ -108,4 +108,9 @@ func withoutOff(in []*mcp.Tool, off map[string]bool) []*mcp.Tool {
 		}
 	}
 	return kept
+}
+
+// toolRefusal is the message for a call to a function that is off.
+func toolRefusal(name string) string {
+	return fmt.Sprintf("%s is turned off on this install (setting Disabled MCP tools, or %s)", name, DisabledSetting)
 }
