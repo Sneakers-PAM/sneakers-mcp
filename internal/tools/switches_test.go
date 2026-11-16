@@ -6,11 +6,15 @@ package tools
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rs/zerolog"
+
+	"github.com/Sneakers-PAM/sneakers-mcp/internal/gwclient"
 )
 
 type clock struct{ t time.Time }
@@ -123,5 +127,44 @@ func TestSwitchesWithoutTokenUseCacheOrStatic(t *testing.T) {
 	}, &clock{time.Unix(0, 0)})
 	if !s.Off(context.Background(), "")["sneakers_rotate_secret"] || calls.Load() != 0 {
 		t.Fatal("a call with no token must not fetch and must use the static list")
+	}
+}
+
+// A switch the gateway turns on after start-up takes effect on the next
+// refresh without a restart, through the real server middleware.
+func TestRestrictWithAppliesGatewaySettingLive(t *testing.T) {
+	gw := fakeGateway(t, `{"data":{"disabledMcpTools":["sneakers_find_secrets"]}}`)
+	s := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
+	Register(s, gwclient.New(gw.URL, nil), zerolog.Nop())
+	sw := NewSwitches(nil, gwclient.New(gw.URL, nil).DisabledMcpTools, time.Minute, zerolog.Nop())
+	RestrictWith(s, sw, zerolog.Nop())
+	ct, st := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	ss, err := s.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ss.Close() }()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cs.Close() }()
+	// The in-memory session carries no verified bearer, so no fetch can run:
+	// the floor (empty) applies and nothing is hidden.
+	res, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Tools) != len(Names()) {
+		t.Fatalf("listed %d tools without a bearer, want all %d", len(res.Tools), len(Names()))
+	}
+	// With a bearer, the fetched list applies.
+	off := sw.Off(ctx, "tok")
+	if !off["sneakers_find_secrets"] {
+		t.Fatalf("fetched switch not applied: %v", off)
+	}
+	if got := toolRefusal("sneakers_find_secrets"); !strings.Contains(got, "Disabled MCP tools") {
+		t.Fatalf("refusal %q does not name the setting", got)
 	}
 }

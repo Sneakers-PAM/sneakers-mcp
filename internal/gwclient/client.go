@@ -808,3 +808,21 @@ func (c *Client) SecretCheckStatus(ctx context.Context, token, secretID string) 
 	err := c.do(ctx, token, checkStatusQuery, map[string]any{"secretId": secretID}, &out)
 	return out.Status, err
 }
+
+const disabledMcpToolsQuery = `query DisabledMcpTools{ disabledMcpTools }`
+
+// DisabledMcpTools returns the tool names the gateway's "Disabled MCP tools"
+// setting turns off; an empty list means every function is on. The setting
+// is install-wide and not secret, so any machine caller's token will do.
+func (c *Client) DisabledMcpTools(ctx context.Context, token string) ([]string, error) {
+	var out struct {
+		Names []string `json:"disabledMcpTools"`
+	}
+	if err := c.do(ctx, token, disabledMcpToolsQuery, map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	if out.Names == nil {
+		out.Names = []string{}
+	}
+	return out.Names, nil
+}

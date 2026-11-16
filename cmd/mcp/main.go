@@ -76,6 +76,9 @@ type config struct {
 	gatewayHTTP *http.Client
 	// DisabledTools are the MCP functions turned off (MCP_DISABLED_TOOLS).
 	DisabledTools []string
+	// DisabledRefresh is how long the gateway's Disabled MCP tools setting is
+	// cached (MCP_DISABLED_TOOLS_REFRESH).
+	DisabledRefresh time.Duration
 }
 
 // hydraEnabled reports whether the Hydra JWT path is on: exactly when an
@@ -114,6 +117,9 @@ func loadConfig() (config, error) {
 	}
 	if cfg.DisabledTools, err = tools.ParseDisabled(os.Getenv(tools.DisabledSetting)); err != nil {
 		return cfg, err
+	}
+	if cfg.DisabledRefresh, err = time.ParseDuration(env("MCP_DISABLED_TOOLS_REFRESH", "30s")); err != nil || cfg.DisabledRefresh < time.Second || cfg.DisabledRefresh > time.Hour {
+		return cfg, fmt.Errorf("MCP_DISABLED_TOOLS_REFRESH %q must be a duration from 1s to 1h", os.Getenv("MCP_DISABLED_TOOLS_REFRESH"))
 	}
 	if !cfg.hydraEnabled() && !cfg.AcceptAPITokens {
 		return cfg, errors.New("no bearer mode configured: set HYDRA_ISSUER and/or MCP_ACCEPT_API_TOKENS=true; refusing to start")
@@ -217,8 +223,9 @@ func buildHandler(ctx context.Context, cfg config, logger zerolog.Logger) (http.
 		Title:   "Sneakers secret vault",
 		Version: cfg.Version,
 	}, nil)
-	tools.Register(mcpServer, gwclient.New(cfg.GatewayURL, cfg.gatewayHTTP), logger)
-	tools.Restrict(mcpServer, cfg.DisabledTools, logger)
+	gw := gwclient.New(cfg.GatewayURL, cfg.gatewayHTTP)
+	tools.Register(mcpServer, gw, logger)
+	tools.RestrictWith(mcpServer, tools.NewSwitches(cfg.DisabledTools, gw.DisabledMcpTools, cfg.DisabledRefresh, logger), logger)
 
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return mcpServer },
