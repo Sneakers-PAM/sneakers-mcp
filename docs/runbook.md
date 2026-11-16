@@ -48,7 +48,7 @@ The dependencies:
 
 | Name | Required | Why |
 |---|---|---|
-| `gateway` | yes | Every tool call is a machine GraphQL call to the gateway, so the server can't do anything without it. Checked with `GET /readyz` on the origin of `GATEWAY_MACHINE_GRAPHQL_URL`, without a token. |
+| `gateway` | yes | Every tool call is a machine GraphQL call to the gateway, so the server can't do anything without it. Checked with `GET /readyz` on the origin of `GATEWAY_MACHINE_GRAPHQL_URL`, without a token. With mutual TLS on, the check presents the same certificate, so the gateway port it names must serve `/readyz` to mTLS callers. |
 | `hydra-jwks` | only when Hydra is the only bearer mode | It verifies Hydra bearers. With `MCP_ACCEPT_API_TOKENS` on, API-token callers still work while it's down, so it only degrades readiness. Listed only when `HYDRA_ISSUER` is set; checked with `GET` on `HYDRA_JWKS_URL`. |
 | `otlp` | no | The collector. Listed only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Degraded with the class `unavailable` when the last export of traces or metrics, or of logs when `OTLP_LOGS_ENABLED` is on, failed. It never fails readiness. |
 

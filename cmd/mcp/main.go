@@ -71,6 +71,9 @@ type config struct {
 	// AuthorizationServer is the Sneakers sign-in issuer (the gateway's OAuth
 	// server on the UI host) that OAuth-capable MCP clients are sent to.
 	AuthorizationServer string
+	// gatewayHTTP is the mutual-TLS client for the gateway (MTLS_CERT_FILE,
+	// MTLS_KEY_FILE, MTLS_CA_FILE); nil keeps the plaintext default.
+	gatewayHTTP *http.Client
 }
 
 // hydraEnabled reports whether the Hydra JWT path is on: exactly when an
@@ -104,6 +107,9 @@ func loadConfig() (config, error) {
 		return cfg, fmt.Errorf("MCP_ACCEPT_API_TOKENS %q is not a boolean", os.Getenv("MCP_ACCEPT_API_TOKENS"))
 	}
 	cfg.AcceptAPITokens = accept
+	if cfg.gatewayHTTP, err = mtlsClient(); err != nil {
+		return cfg, err
+	}
 	if !cfg.hydraEnabled() && !cfg.AcceptAPITokens {
 		return cfg, errors.New("no bearer mode configured: set HYDRA_ISSUER and/or MCP_ACCEPT_API_TOKENS=true; refusing to start")
 	}
@@ -156,7 +162,7 @@ func buildVerifier(cfg config) (*authn.Verifier, error) {
 		v.JWT = hv.Verify
 	}
 	if cfg.AcceptAPITokens {
-		av, err := authn.NewAPITokenVerifier(authn.APITokenConfig{GatewayURL: cfg.GatewayURL})
+		av, err := authn.NewAPITokenVerifier(authn.APITokenConfig{GatewayURL: cfg.GatewayURL, HTTPClient: cfg.gatewayHTTP})
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +212,7 @@ func buildHandler(ctx context.Context, cfg config, logger zerolog.Logger) (http.
 		Title:   "Sneakers secret vault",
 		Version: cfg.Version,
 	}, nil)
-	tools.Register(mcpServer, gwclient.New(cfg.GatewayURL, nil), logger)
+	tools.Register(mcpServer, gwclient.New(cfg.GatewayURL, cfg.gatewayHTTP), logger)
 
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return mcpServer },
@@ -318,7 +324,7 @@ func main() {
 	logger.Info().Str("http", cfg.HTTPPort).Bool("hydra", cfg.hydraEnabled()).
 		Bool("api_tokens", cfg.AcceptAPITokens).Str("issuer", cfg.HydraIssuer).
 		Str("audience", cfg.HydraAudience).Str("resource", cfg.ResourceURL).
-		Str("gateway", cfg.GatewayURL).Msg("mcp starting")
+		Str("gateway", cfg.GatewayURL).Bool("mtls", cfg.gatewayHTTP != nil).Msg("mcp starting")
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal().Err(err).Msg("http server exited")
 	}
