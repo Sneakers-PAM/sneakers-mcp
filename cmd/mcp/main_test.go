@@ -415,3 +415,20 @@ func TestOversizedRequestBodyIsRejected(t *testing.T) {
 		t.Fatalf("status = %d, want 413", resp.StatusCode)
 	}
 }
+
+func TestLoadConfigDisabledTools(t *testing.T) {
+	t.Setenv("HYDRA_ISSUER", "")
+	t.Setenv("MCP_ACCEPT_API_TOKENS", "true")
+	t.Setenv("MCP_DISABLED_TOOLS", "sneakers_rotate_secret, sneakers_find_secrets")
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.DisabledTools) != 2 {
+		t.Fatalf("DisabledTools = %v, want two names", cfg.DisabledTools)
+	}
+	t.Setenv("MCP_DISABLED_TOOLS", "sneakers_nope")
+	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "sneakers_nope") {
+		t.Fatalf("an unknown name must stop start-up naming it, got %v", err)
+	}
+}
